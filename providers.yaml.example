@@ -1,0 +1,9 @@
+providers:
+  - type: agnes
+    name: Agnes Video 2.5
+    baseUrl: https://apihub.agnes-ai.com/v1
+    apiKey: REPLACE_WITH_AGNES_API_KEY
+  - type: modelscope
+    name: ModelScope
+    baseUrl: https://api-inference.modelscope.cn
+    apiKey: REPLACE_WITH_MODELSCOPE_ACCESS_TOKEN
