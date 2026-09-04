@@ -13,6 +13,8 @@
 
 以 `aigc` 用户安装项目到 `/opt/aigc-studio`，运行 `pnpm install && pnpm build`。standalone 运行时由构建产物提供，因此构建完成后可删除开发依赖。复制 `deploy/environment.example` 到 `/etc/aigc-studio/environment`，复制提供方配置并限制文件权限。
 
+部署时必须让服务端 bundle 与浏览器静态资源来自同一次构建：将 `scripts/deploy-standalone.sh` 放在项目根目录执行。脚本会清理并同步 `.next/standalone` 和 `.next/static`，避免 HTML 引用的新 hash 在 Nginx 上找不到 CSS/JS。Nginx 的 `/_next/static/` 应指向 `/opt/aigc-studio/.next/standalone/.next/static/`，不要指向并行的 `/opt/aigc-studio/.next/static/`。
+
 安装 `deploy/aigc-studio.service`、`deploy/aigc-studio-poll.service`、`deploy/aigc-studio-poll.timer` 到 `/etc/systemd/system/`，执行 `systemctl daemon-reload && systemctl enable --now aigc-studio aigc-studio-poll.timer`。
 
 将 `deploy/nginx.conf` 安装为站点配置；示例复用服务器已有的 `/etc/nginx/.htpasswd`。站点监听 `8083`，因此访问地址为 `https://服务器公网IP:8083`；请同时在 Volcengine 安全组开放 TCP 8083。自签 IP 证书需包含 IP SAN，例如：
