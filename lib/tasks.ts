@@ -21,6 +21,7 @@ export function getAsset(assetId: string): AssetRecord | undefined { const row =
 export function getTask(taskId: string): TaskRecord | undefined { const row = sqlite.prepare("SELECT id, provider_id providerId, model_id modelId, capability, mode, parameters_json parametersJson, status, progress, external_task_id externalTaskId, external_video_id externalVideoId, error, created_at createdAt, started_at startedAt, completed_at completedAt, parent_task_id parentTaskId, result_asset_id resultAssetId FROM tasks WHERE id=?").get(taskId) as any; return row ? { ...row, parameters: parse(row.parametersJson) } : undefined; }
 export function listTaskAssets(taskId: string) { return (sqlite.prepare("SELECT ta.role, a.id FROM task_assets ta JOIN assets a ON a.id=ta.asset_id WHERE ta.task_id=?").all(taskId) as { role: string; id: string }[]).map((item) => ({ role: item.role, asset: getAsset(item.id)! })); }
 export function listTasks() { return (sqlite.prepare("SELECT id FROM tasks ORDER BY created_at DESC").all() as { id: string }[]).map((row) => getTask(row.id)!); }
+export async function deleteTasks(taskIds: string[]) { for (const taskId of taskIds) await deleteTask(taskId); }
 
 export async function createAsset(file: File): Promise<AssetRecord> {
   if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) throw new Error("仅支持 PNG、JPEG、WebP 图片。");
