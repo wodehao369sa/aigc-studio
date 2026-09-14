@@ -4,24 +4,207 @@ import path from "node:path";
 import { initializeDatabase, sqlite } from "@/lib/db";
 import { mediaPath, removeMedia, writeMedia } from "@/lib/media";
 import { getAdapter } from "@/lib/providers";
-import type { AssetRecord, Capability, ModelRecord, ProviderRecord, TaskInput, TaskRecord } from "@/lib/types";
+import type {
+  AssetRecord,
+  Capability,
+  ModelRecord,
+  ProviderRecord,
+  TaskAssetLink,
+  TaskDetailRecord,
+  TaskInput,
+  TaskListQuery,
+  TaskListResult,
+  TaskRecord,
+  TaskSummary
+} from "@/lib/types";
 
 initializeDatabase();
-const parse = <T>(value: string) => JSON.parse(value) as T;
+
+const parse = <T>(value: string): T => JSON.parse(value) as T;
 const id = () => crypto.randomUUID();
 
-export function listProviders(): ProviderRecord[] { return sqlite.prepare("SELECT id, provider_type providerType, name, base_url baseUrl, enabled, max_concurrency maxConcurrency FROM providers ORDER BY name").all().map((item: any) => ({ ...item, enabled: Boolean(item.enabled) })) as ProviderRecord[]; }
-export function listModels(capability?: string, includeDisabled = false): ModelRecord[] {
-  const rows = sqlite.prepare(`SELECT id, provider_id providerId, external_model_id externalModelId, name, version, description, capabilities_json capabilitiesJson, parameter_schema_json parameterSchemaJson, input_constraints_json inputConstraintsJson, enabled, sort_order sortOrder FROM models ${includeDisabled ? "" : "WHERE enabled=1"} ORDER BY sort_order, name`).all() as any[];
-  return rows.map((row) => ({ ...row, enabled: Boolean(row.enabled), capabilities: parse(row.capabilitiesJson), parameterSchema: parse(row.parameterSchemaJson), inputConstraints: parse(row.inputConstraintsJson) })).filter((model) => !capability || model.capabilities.includes(capability as Capability));
+type ProviderRow = Omit<ProviderRecord, "enabled"> & { enabled: number };
+type ModelRow = Omit<ModelRecord, "enabled" | "capabilities" | "parameterSchema" | "inputConstraints"> & {
+  enabled: number;
+  capabilitiesJson: string;
+  parameterSchemaJson: string;
+  inputConstraintsJson: string;
+};
+type AssetRow = Omit<AssetRecord, "metadata"> & { metadataJson: string };
+type TaskRow = Omit<TaskRecord, "parameters" | "isFavorite"> & {
+  parametersJson: string;
+  isFavorite: number;
+};
+type TaskSummaryRow = Omit<TaskSummary, "isFavorite" | "prompt"> & {
+  prompt: unknown;
+  isFavorite: number;
+};
+
+export function listProviders(): ProviderRecord[] {
+  const rows = sqlite.prepare(`
+    SELECT id, provider_type providerType, name, base_url baseUrl, enabled, max_concurrency maxConcurrency
+    FROM providers
+    ORDER BY name
+  `).all() as ProviderRow[];
+  return rows.map((row) => ({ ...row, enabled: Boolean(row.enabled) }));
 }
-export function getModel(modelId: string): ModelRecord | undefined { return listModels(undefined, true).find((model) => model.id === modelId); }
-export function getProvider(id: string): ProviderRecord | undefined { return listProviders().find((provider) => provider.id === id); }
-export function getAsset(assetId: string): AssetRecord | undefined { const row = sqlite.prepare("SELECT id, storage_key storageKey, original_filename originalFilename, mime_type mimeType, size_bytes sizeBytes, metadata_json metadataJson, created_at createdAt FROM assets WHERE id=?").get(assetId) as any; return row ? { ...row, metadata: parse(row.metadataJson) } : undefined; }
-export function getTask(taskId: string): TaskRecord | undefined { const row = sqlite.prepare("SELECT id, provider_id providerId, model_id modelId, capability, mode, parameters_json parametersJson, status, progress, external_task_id externalTaskId, external_video_id externalVideoId, error, created_at createdAt, started_at startedAt, completed_at completedAt, parent_task_id parentTaskId, result_asset_id resultAssetId FROM tasks WHERE id=?").get(taskId) as any; return row ? { ...row, parameters: parse(row.parametersJson) } : undefined; }
-export function listTaskAssets(taskId: string) { return (sqlite.prepare("SELECT ta.role, a.id FROM task_assets ta JOIN assets a ON a.id=ta.asset_id WHERE ta.task_id=?").all(taskId) as { role: string; id: string }[]).map((item) => ({ role: item.role, asset: getAsset(item.id)! })); }
-export function listTasks() { return (sqlite.prepare("SELECT id FROM tasks ORDER BY created_at DESC").all() as { id: string }[]).map((row) => getTask(row.id)!); }
-export async function deleteTasks(taskIds: string[]) { for (const taskId of taskIds) await deleteTask(taskId); }
+
+export function listModels(capability?: string, includeDisabled = false): ModelRecord[] {
+  const rows = sqlite.prepare(`
+    SELECT
+      id, provider_id providerId, external_model_id externalModelId, name, version, description,
+      capabilities_json capabilitiesJson, parameter_schema_json parameterSchemaJson,
+      input_constraints_json inputConstraintsJson, enabled, sort_order sortOrder
+    FROM models
+    ${includeDisabled ? "" : "WHERE enabled=1"}
+    ORDER BY sort_order, name
+  `).all() as ModelRow[];
+  return rows
+    .map((row) => ({
+      ...row,
+      enabled: Boolean(row.enabled),
+      capabilities: parse<Capability[]>(row.capabilitiesJson),
+      parameterSchema: parse<ModelRecord["parameterSchema"]>(row.parameterSchemaJson),
+      inputConstraints: parse<Record<string, unknown>>(row.inputConstraintsJson)
+    }))
+    .filter((model) => !capability || model.capabilities.includes(capability as Capability));
+}
+
+export function getModel(modelId: string): ModelRecord | undefined {
+  return listModels(undefined, true).find((model) => model.id === modelId);
+}
+
+export function getProvider(id: string): ProviderRecord | undefined {
+  return listProviders().find((provider) => provider.id === id);
+}
+
+export function getAsset(assetId: string): AssetRecord | undefined {
+  const row = sqlite.prepare(`
+    SELECT id, storage_key storageKey, original_filename originalFilename, mime_type mimeType,
+      size_bytes sizeBytes, metadata_json metadataJson, created_at createdAt
+    FROM assets
+    WHERE id=?
+  `).get(assetId) as AssetRow | undefined;
+  return row ? { ...row, metadata: parse(row.metadataJson) } : undefined;
+}
+
+export function getTask(taskId: string): TaskRecord | undefined {
+  const row = sqlite.prepare(`
+    SELECT
+      id, provider_id providerId, model_id modelId, capability, mode, parameters_json parametersJson,
+      status, progress, external_task_id externalTaskId, external_video_id externalVideoId, error,
+      created_at createdAt, started_at startedAt, completed_at completedAt,
+      parent_task_id parentTaskId, result_asset_id resultAssetId,
+      is_favorite isFavorite, favorited_at favoritedAt
+    FROM tasks
+    WHERE id=?
+  `).get(taskId) as TaskRow | undefined;
+  if (!row) return undefined;
+  const { parametersJson, isFavorite, ...task } = row;
+  return {
+    ...task,
+    parameters: parse(parametersJson),
+    isFavorite: Boolean(isFavorite)
+  };
+}
+
+export function listTaskAssets(taskId: string): TaskAssetLink[] {
+  const rows = sqlite.prepare(`
+    SELECT ta.role, a.id
+    FROM task_assets ta
+    JOIN assets a ON a.id = ta.asset_id
+    WHERE ta.task_id=?
+    ORDER BY ta.role
+  `).all(taskId) as { role: string; id: string }[];
+  return rows.flatMap((item) => {
+    const asset = getAsset(item.id);
+    return asset ? [{ role: item.role, asset }] : [];
+  });
+}
+
+export function getTaskDetail(taskId: string): TaskDetailRecord | undefined {
+  const task = getTask(taskId);
+  if (!task) return undefined;
+  const row = sqlite.prepare("SELECT name FROM models WHERE id=?").get(task.modelId) as { name: string } | undefined;
+  return {
+    ...task,
+    modelName: row?.name ?? task.modelId,
+    assets: listTaskAssets(task.id)
+  };
+}
+
+function taskSummaryWhere(query: TaskListQuery) {
+  const conditions: string[] = [];
+  const values: Record<string, unknown> = {};
+
+  if (query.favoriteOnly) conditions.push("t.is_favorite=1");
+  if (query.succeededOnly) {
+    conditions.push("t.status='succeeded'");
+    conditions.push("t.result_asset_id IS NOT NULL");
+  }
+  if (query.status) {
+    conditions.push("t.status=@status");
+    values.status = query.status;
+  }
+  if (query.capability) {
+    conditions.push("t.capability=@capability");
+    values.capability = query.capability;
+  }
+
+  return {
+    where: conditions.length ? `WHERE ${conditions.join(" AND ")}` : "",
+    values
+  };
+}
+
+function mapTaskSummaryRow(row: TaskSummaryRow): TaskSummary {
+  return {
+    ...row,
+    prompt: typeof row.prompt === "string" ? row.prompt : null,
+    isFavorite: Boolean(row.isFavorite)
+  };
+}
+
+export function listTaskSummaries(query: TaskListQuery = {}): TaskListResult {
+  const page = Math.max(1, query.page ?? 1);
+  const pageSize = Math.min(100, Math.max(1, query.pageSize ?? 20));
+  const { where, values } = taskSummaryWhere(query);
+  const total = (sqlite.prepare(`SELECT count(*) count FROM tasks t ${where}`).get(values) as { count: number }).count;
+  const order = query.orderBy === "favoritedAt"
+    ? "COALESCE(t.favorited_at, t.created_at) DESC"
+    : "t.created_at DESC";
+  const rows = sqlite.prepare(`
+    SELECT
+      t.id, t.status, t.capability, t.mode,
+      json_extract(t.parameters_json, '$.prompt') prompt,
+      COALESCE(m.name, t.model_id) modelName,
+      t.created_at createdAt, t.completed_at completedAt, t.progress, t.error,
+      t.result_asset_id resultAssetId, a.mime_type resultMimeType,
+      t.is_favorite isFavorite, t.favorited_at favoritedAt
+    FROM tasks t
+    LEFT JOIN models m ON m.id = t.model_id
+    LEFT JOIN assets a ON a.id = t.result_asset_id
+    ${where}
+    ORDER BY ${order}
+    LIMIT @limit OFFSET @offset
+  `).all({ ...values, limit: pageSize, offset: (page - 1) * pageSize }) as TaskSummaryRow[];
+
+  return { items: rows.map(mapTaskSummaryRow), page, pageSize, total };
+}
+
+export function setTaskFavorite(taskId: string, favorite: boolean): TaskDetailRecord | undefined {
+  const result = sqlite.prepare(`
+    UPDATE tasks
+    SET is_favorite=?, favorited_at=?
+    WHERE id=?
+  `).run(favorite ? 1 : 0, favorite ? Date.now() : null, taskId);
+  if (result.changes === 0) return undefined;
+  return getTaskDetail(taskId);
+}
+
+export async function deleteTasks(taskIds: string[]) {
+  for (const taskId of taskIds) await deleteTask(taskId);
+}
 
 export async function createAsset(file: File): Promise<AssetRecord> {
   if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) throw new Error("仅支持 PNG、JPEG、WebP 图片。");

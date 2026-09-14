@@ -8,3 +8,4 @@ providers.yaml
 coverage
 *.tsbuildinfo
 .DS_Store
+*.wav
