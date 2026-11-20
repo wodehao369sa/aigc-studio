@@ -7,3 +7,7 @@ providers:
     name: Xiaomi MiMo
     baseUrl: https://api.xiaomimimo.com/v1
     apiKey: REPLACE_WITH_XIAOMI_MIMO_API_KEY
+  - type: modelscope
+    name: ModelScope
+    baseUrl: https://api-inference.modelscope.cn
+    apiKey: REPLACE_WITH_MODELSCOPE_ACCESS_TOKEN

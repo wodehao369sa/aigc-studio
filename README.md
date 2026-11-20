@@ -23,6 +23,19 @@ Basic Auth，面向单用户、2C2G 服务器。服务商以可热插拔的 Prov
 MiMo 使用 OpenAI 兼容的 `/v1/chat/completions`，认证头为 `api-key`，音频以
 Base64 内联返回，同步生成。
 
+**ModelScope API-Inference（图片）**
+
+| 模型 | 能力 | 说明 |
+| --- | --- | --- |
+| `Qwen/Qwen-Image-2.1-Turbo` | 文生图、图生图 | 7B 加速版，8 步出图，支持多参考图编辑 |
+| `Qwen/Qwen-Image-2.1` | 文生图、图生图 | 统一文生图/图像编辑，支持 RGBA 透明通道 |
+| `Tongyi-MAI/Z-Image-Turbo` | 文生图 | 6B 蒸馏模型，风格多样、支持负向提示 |
+| `openmoss/MOSS-Image-SFT` | 文生图 | 文本渲染、布局生成、长提示词 |
+
+ModelScope 使用异步任务：`POST /v1/images/generations`（`X-ModelScope-Async-Mode: true`）
+→ 轮询 `GET /v1/tasks/{id}`（`X-ModelScope-Task-Type: image_generation`），本地参考图以
+Base64 Data URI 通过 `image_url` 提交。
+
 ## 技术栈
 
 - Python 3.11+、FastAPI、Uvicorn
@@ -56,6 +69,7 @@ app/providers/
     adapter.py       # 请求映射、校验、状态归一化
     models.py        # 三个模型的预设参数
   xiaomi_mimo/       # 小米 MiMo TTS（结构相同）
+  modelscope/        # ModelScope API-Inference（异步图片任务）
 ```
 
 新增服务商只需复制 `agnes/` 目录、改名并实现 `definition.py`，然后调用

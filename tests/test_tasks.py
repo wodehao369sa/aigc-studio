@@ -182,7 +182,7 @@ def test_delete_task_removes_media(client, monkeypatch, registered_model):
     assert client.get(f"/api/media/{asset['id']}").status_code == 404
 
 
-def test_retry_creates_new_task(client, monkeypatch, registered_model):
+def test_retry_runs_same_task_in_place(client, monkeypatch, registered_model):
     FakeAsyncClient.routes = {}
     monkeypatch.setattr(agnes_adapter.httpx, "AsyncClient", FakeAsyncClient)
     original = client.post(
@@ -190,13 +190,18 @@ def test_retry_creates_new_task(client, monkeypatch, registered_model):
         json={"modelId": registered_model["id"], "capability": "text_to_video", "prompt": "hi"},
     ).json()
     assert original["status"] == "failed"
+    task_id = original["id"]
 
     _mock_video_create(monkeypatch, video_id="v2", task_id="t2")
-    response = client.post(f"/api/tasks/{original['id']}/retry")
+    response = client.post(f"/api/tasks/{task_id}/retry")
     assert response.status_code == 202, response.text
     retried = response.json()
+    assert retried["id"] == task_id
     assert retried["status"] == "running"
-    assert retried["parentTaskId"] == original["id"]
+    assert retried["externalTaskId"] == "t2"
+    # 不新增任务记录
+    assert client.get("/api/tasks").json()["total"] == 1
+    assert client.get(f"/api/tasks/{task_id}").json()["parentTaskId"] is None
 
 
 def test_image_to_image_uses_base64_without_reference_token(client, monkeypatch):

@@ -130,6 +130,13 @@ class ProviderError(RuntimeError):
     """An upstream provider call failed."""
 
 
+class ProviderTransientError(ProviderError):
+    """A transient upstream failure (throttling / 5xx / temporary 4xx).
+
+    The poller retries these for a bounded time instead of failing the task.
+    """
+
+
 class MediaReader(Protocol):
     def read_bytes(self, storage_key: str) -> bytes: ...
 

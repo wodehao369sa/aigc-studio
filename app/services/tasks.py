@@ -19,7 +19,14 @@ import httpx
 from .. import repository
 from ..config import MAX_RESULT_BYTES, PROVIDER_TIMEOUT_SECONDS
 from ..entities import Asset, ModelConfig, Provider, Task, TaskDetail, TaskListResult
-from ..providers.base import AssetInput, ProviderRuntime, ProviderStatus, ProviderTaskRef, TaskInput
+from ..providers.base import (
+    AssetInput,
+    ProviderRuntime,
+    ProviderStatus,
+    ProviderTaskRef,
+    ProviderTransientError,
+    TaskInput,
+)
 from ..provider_config import get_provider_config
 from .assets import create_result_asset, delete_task_assets
 from .media import extension_for_mime
@@ -355,10 +362,17 @@ async def _download_result(ctx, url: str) -> tuple[bytes, str | None]:
         return data, mime_type
 
     timeout = httpx.Timeout(PROVIDER_TIMEOUT_SECONDS)
-    async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-        response = await client.get(url)
+    try:
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+            response = await client.get(url)
+        if response.status_code == 429 or response.status_code >= 500:
+            raise ProviderTransientError(f"下载结果暂时失败: {response.status_code}")
         response.raise_for_status()
         data = response.content
+    except httpx.TransportError as error:
+        raise ProviderTransientError(f"下载结果网络异常: {error}") from error
+    except httpx.HTTPStatusError as error:
+        raise TaskError(f"下载结果失败: {error.response.status_code}") from error
     if len(data) > MAX_RESULT_BYTES:
         raise TaskError("生成结果超过 500 MB 限制。")
     content_type = response.headers.get("content-type", "").split(";", 1)[0].strip()
@@ -409,6 +423,10 @@ def _fallback_mime(capability: str) -> str:
 
 # --- polling -----------------------------------------------------------------
 
+# Consecutive transient upstream failures tolerated before a task is failed.
+TRANSIENT_RETRY_LIMIT = 6
+_TRANSIENT_ERRORS: dict[str, int] = {}
+
 
 async def poll_one_task(ctx) -> Task | None:
     task = repository.find_pollable_task(ctx.db)
@@ -443,7 +461,25 @@ async def poll_one_task(ctx) -> Task | None:
         )
         status = await _adapter(ctx, provider, runtime).get_status(ref, model, runtime)
         await _apply_status(ctx, task, status)
-    except Exception as error:  # noqa: BLE001 - network/upstream errors fail the task
+        _TRANSIENT_ERRORS.pop(task.id, None)
+    except ProviderTransientError as error:
+        count = _TRANSIENT_ERRORS.get(task.id, 0) + 1
+        _TRANSIENT_ERRORS[task.id] = count
+        logger.warning(
+            "task %s transient poll error %d/%d: %s", task.id, count, TRANSIENT_RETRY_LIMIT, error
+        )
+        if count >= TRANSIENT_RETRY_LIMIT:
+            _TRANSIENT_ERRORS.pop(task.id, None)
+            repository.update_task_fields(
+                ctx.db,
+                task.id,
+                status="failed",
+                error=_safe_error(error),
+                completed_at=_now(),
+            )
+            repository.invalidate_task_tokens(ctx.db, task.id, _now())
+    except Exception as error:  # noqa: BLE001 - non-transient errors fail the task
+        _TRANSIENT_ERRORS.pop(task.id, None)
         logger.warning("task %s poll failed: %s", task.id, error)
         repository.update_task_fields(
             ctx.db,
@@ -492,24 +528,35 @@ async def _apply_status(ctx, task: Task, status: ProviderStatus) -> None:
 
 
 async def retry_task(ctx, task_id: str) -> Task:
+    """Re-run a failed task in place (same task id, no duplicate record)."""
     task = repository.get_task(ctx.db, task_id)
     if not task or task.status != "failed":
         raise TaskError("仅失败任务可重试。")
-    assets = [
-        {"role": link.role, "assetId": link.asset.id}
-        for link in repository.list_task_assets(ctx.db, task.id)
-        if link.role != "output"
-    ]
-    return await create_task(
-        ctx,
-        model_id=task.model_id,
-        capability=task.capability,
-        prompt=str(task.parameters.get("prompt", "")),
-        parameters={k: v for k, v in task.parameters.items() if k != "prompt"},
-        assets=assets,
-        mode=task.mode,
-        parent_task_id=task.id,
+    model = repository.get_model(ctx.db, task.model_id)
+    provider = repository.get_provider(ctx.db, task.provider_id)
+    if not model or not provider:
+        raise TaskError("任务配置不存在。")
+
+    definition = ctx.registry.get(provider.provider_type)
+    needs_public_url = bool(
+        definition and task.capability in definition.public_url_capabilities
     )
+    # 清空上一次尝试的产物与外部标识，状态回到 pending 后重新提交。
+    repository.update_task_fields(
+        ctx.db,
+        task.id,
+        status="pending",
+        progress=0,
+        error=None,
+        external_task_id=None,
+        external_video_id=None,
+        started_at=None,
+        completed_at=None,
+    )
+    refreshed = repository.get_task(ctx.db, task.id)
+    task_input = _rebuild_input(ctx, refreshed, with_public_url=needs_public_url)
+    await _dispatch(ctx, refreshed, task_input, model, provider)
+    return repository.get_task(ctx.db, task.id)
 
 
 def delete_task(ctx, task_id: str) -> None:
