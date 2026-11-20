@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}任务详情 · AIGC Studio{% endblock %}
+{% block content %}
+{% set output = task.assets | selectattr("role", "equalto", "output") | list | first %}
+{% if task.resultAssetId %}
+  {% set preferred = task.assets | selectattr("role", "equalto", "output") | selectattr("asset.id", "equalto", task.resultAssetId) | list %}
+  {% if preferred %}{% set output = preferred | first %}{% endif %}
+{% endif %}
+<section class="page-heading">
+  <div>
+    <p class="eyebrow">TASK DETAIL</p>
+    <h1>生成任务</h1>
+    <p>
+      <span class="status {{ task.status }}" id="task-status">{{ task.status }}</span>
+      <span id="task-progress">{{ task.progress }}%</span>
+      {% if task.error %}<span id="task-error"> · {{ task.error }}</span>{% endif %}
+    </p>
+  </div>
+  <div class="actions">
+    <button id="retry-task" {{ "hidden" if task.status != "failed" }}>重试</button>
+    <button id="delete-task" class="danger-button">删除</button>
+  </div>
+</section>
+
+<section class="result" id="result-section">
+  {% if output %}
+    {% set asset = output.asset %}
+    {% if asset.mimeType.startswith("video/") %}
+      <video src="/api/media/{{ asset.id }}" controls></video>
+    {% elif asset.mimeType.startswith("audio/") %}
+      <audio src="/api/media/{{ asset.id }}" controls></audio>
+    {% else %}
+      <a class="result-thumb-link" href="/api/media/{{ asset.id }}" target="_blank" rel="noopener">
+        <img class="result-thumb" src="/api/thumbnail/{{ asset.id }}" alt="生成结果" />
+      </a>
+    {% endif %}
+    <div class="result-links">
+      <a class="primary" href="/api/media/{{ asset.id }}" download>下载原图</a>
+    </div>
+  {% elif task.resultText %}
+    <div class="panel"><pre class="text-result">{{ task.resultText }}</pre></div>
+  {% else %}
+    <div class="panel">
+      <h2>等待结果</h2>
+      <p>页面会自动刷新状态。关闭页面不影响服务器轮询任务。</p>
+    </div>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <h2>任务信息</h2>
+  <dl class="task-detail-meta">
+    <div><dt>模型</dt><dd id="task-model">{{ task.modelName }}</dd></div>
+    <div><dt>创建时间</dt><dd>{{ task.createdAt | datetime }}</dd></div>
+    <div><dt>完成时间</dt><dd id="task-completed">{{ (task.completedAt | datetime) if task.completedAt else "未完成" }}</dd></div>
+  </dl>
+  <h3>提示词</h3>
+  <p class="task-detail-prompt">{{ task.parameters.get("prompt") or "无提示词" }}</p>
+</section>
+
+<section class="panel">
+  <h2>输入参数</h2>
+  <pre>{{ task.parameters | json_pretty }}</pre>
+</section>
+
+<script id="task-data" type="application/json">{{ task | tojson }}</script>
+{% endblock %}

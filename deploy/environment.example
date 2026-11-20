@@ -1,7 +1,11 @@
 DATABASE_URL=/var/lib/aigc-studio/aigc-studio.db
 MEDIA_ROOT=/var/lib/aigc-studio/media
-PUBLIC_BASE_URL=https://YOUR_PUBLIC_IP
+# 仅视频参考图（图生视频/首尾帧/参考视频）需要公网可访问的参考图 URL。
+# 图生图走 Base64，不依赖此变量。若使用自签证书，Agnes 无法下载 HTTPS 参考图，
+# 需要改用 http://域名 或部署 deploy/aigc-studio-reference-80.conf。
+PUBLIC_BASE_URL=https://YOUR_PUBLIC_IP:8083
 PROVIDERS_CONFIG_PATH=/etc/aigc-studio/providers.yaml
-NODE_ENV=production
-HOSTNAME=127.0.0.1
-PORT=3000
+POLL_INTERVAL_SECONDS=5
+PROVIDER_TIMEOUT_SECONDS=120
+# Keep the app bounded on 2C2G machines.
+MEMORY_MAX=512M

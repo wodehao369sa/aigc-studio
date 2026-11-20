@@ -1,0 +1,24 @@
+[Unit]
+Description=AIGC Studio web application
+After=network.target
+
+[Service]
+Type=simple
+User=aigc
+Group=aigc
+WorkingDirectory=/opt/aigc-studio
+EnvironmentFile=/etc/aigc-studio/environment
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node /opt/aigc-studio/.next/standalone/server.js
+Restart=on-failure
+RestartSec=3
+MemoryMax=512M
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/var/lib/aigc-studio /opt/aigc-studio/data
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+PrivateDevices=true
+
+[Install]
+WantedBy=multi-user.target

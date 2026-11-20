@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}服务与模型 · AIGC Studio{% endblock %}
+{% block content %}
+<section class="page-heading">
+  <div>
+    <p class="eyebrow">LOCAL CONFIGURATION</p>
+    <h1>服务与模型</h1>
+    <p>API 密钥只从服务器的 providers.yaml 读取，不会显示在这里。</p>
+  </div>
+</section>
+
+<div class="settings">
+  <div class="segments">
+    <button type="button" id="tab-connections" aria-pressed="true">服务连接</button>
+    <button type="button" id="tab-models" aria-pressed="false">模型目录</button>
+    <button type="button" id="reload-providers">重新加载服务商</button>
+  </div>
+
+  <section id="connections">
+    {% for provider in providers %}
+    <div class="catalog-row">
+      <div>
+        <strong>{{ provider.name }}</strong><br />
+        <code>{{ provider.baseUrl }}</code><br />
+        <small>{{ provider.providerType }}</small>
+      </div>
+      <div class="actions provider-controls">
+        <span class="status {{ "succeeded" if provider.configured else "failed" }}">
+          {{ "已配置" if provider.configured else "缺少配置" }} · {{ "已启用" if provider.enabled else "已停用" }}
+        </span>
+        <label><input type="checkbox" class="provider-enabled" data-id="{{ provider.id }}" {{ "checked" if provider.enabled }} />启用</label>
+        <label>并发 <input type="number" class="provider-concurrency" data-id="{{ provider.id }}" value="{{ provider.maxConcurrency }}" min="1" max="16" /></label>
+      </div>
+    </div>
+    {% else %}
+    <p class="hint">尚未注册任何服务商。请将提供方模块放入 <code>app/providers/</code>。</p>
+    {% endfor %}
+  </section>
+
+  <section id="models" hidden>
+    <div class="section-toolbar">
+      <h2>模型目录</h2>
+      <button type="button" id="add-model" class="primary">添加模型</button>
+    </div>
+    <div id="model-list">
+      {% for model in models %}
+      <div class="catalog-row" data-id="{{ model.id }}">
+        <div>
+          <strong>{{ model.name }}</strong> · {{ "已启用" if model.enabled else "已停用" }}<br />
+          <code>{{ model.providerId }} / {{ model.externalModelId }}</code><br />
+          <small>{{ model.capabilities | map("caplabel") | join("、") }}</small>
+        </div>
+        <div class="actions">
+          <button type="button" class="edit-model" data-id="{{ model.id }}">编辑</button>
+          <button type="button" class="danger-button delete-model" data-id="{{ model.id }}">删除</button>
+        </div>
+      </div>
+      {% else %}
+      <p class="hint">暂无模型。</p>
+      {% endfor %}
+    </div>
+
+    <form id="model-form" class="panel form-grid model-editor" hidden>
+      <h2 class="wide" id="model-form-title">添加模型</h2>
+      <label>服务
+        <select id="model-provider" name="providerId">
+          {% for provider in providers %}
+          <option value="{{ provider.id }}">{{ provider.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label id="preset-field">模型预设
+        <select id="model-preset" name="preset"></select>
+      </label>
+      <label>显示名称<input id="model-name" name="name" required /></label>
+      <label>服务商模型 ID<input id="model-external" name="externalModelId" /></label>
+      <label>排序<input id="model-sort" name="sortOrder" type="number" min="0" max="99999" value="0" /></label>
+      <label class="wide">说明<input id="model-description" name="description" /></label>
+      <fieldset class="wide" id="capability-field">
+        <legend>创作能力</legend>
+        <div id="model-capabilities"></div>
+      </fieldset>
+      <details class="wide" id="schema-field">
+        <summary>高级参数</summary>
+        <label>参数定义（JSON）<textarea id="model-schema" name="parameterSchema"></textarea></label>
+      </details>
+      <fieldset class="wide"><label><input id="model-enabled" name="enabled" type="checkbox" checked />启用模型</label></fieldset>
+      <div class="actions wide">
+        <button type="submit" class="primary">保存</button>
+        <button type="button" id="cancel-model">取消</button>
+      </div>
+    </form>
+    <p id="settings-message" class="error" role="alert"></p>
+  </section>
+</div>
+
+<script id="settings-data"
+        type="application/json">{{ {"providers": providers, "models": models, "presets": presets, "labels": capability_labels} | tojson }}</script>
+{% endblock %}

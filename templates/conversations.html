@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}连续对话 · AIGC Studio{% endblock %}
+{% block content %}
+<section class="page-heading">
+  <div>
+    <p class="eyebrow">CONVERSATIONS</p>
+    <h1>连续对话</h1>
+    <p>与文本模型多轮对话，自动携带历史上下文。</p>
+  </div>
+</section>
+
+<section class="panel" id="new-conversation">
+  <h2>新建对话</h2>
+  <form id="new-conversation-form" class="form-grid">
+    <label>模型
+      <select id="conversation-model" required>
+        {% for model in models %}
+        <option value="{{ model.id }}">{{ model.name }}</option>
+        {% else %}
+        <option value="">暂无文本模型，请先在设置中添加</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>标题（可选）<input id="conversation-title" placeholder="新对话" /></label>
+    <label class="wide">系统提示词（可选）
+      <textarea id="conversation-system" placeholder="设定助手角色、语气或约束，会作为整个对话的系统消息"></textarea>
+    </label>
+    <div class="actions wide"><button type="submit" class="primary">创建对话</button></div>
+    <p class="wide error" id="conversation-message" role="alert" hidden></p>
+  </form>
+</section>
+
+<section class="panel">
+  <h2>历史对话</h2>
+  <div class="conversation-list">
+    {% for conversation in conversations %}
+    <a class="catalog-row conversation-row" href="/conversations/{{ conversation.id }}">
+      <div>
+        <strong>{{ conversation.title or "新对话" }}</strong><br />
+        <small>{{ conversation.modelName or conversation.modelId }} · {{ conversation.updatedAt | datetime }}</small>
+      </div>
+      <span class="status">→</span>
+    </a>
+    {% else %}
+    <p class="hint">还没有对话。</p>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

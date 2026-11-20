@@ -1,5 +1,5 @@
 [Unit]
-Description=AIGC Studio web application
+Description=AIGC Studio web application (FastAPI)
 After=network.target
 
 [Service]
@@ -8,14 +8,17 @@ User=aigc
 Group=aigc
 WorkingDirectory=/opt/aigc-studio
 EnvironmentFile=/etc/aigc-studio/environment
-ExecStart=/usr/bin/node /opt/aigc-studio/.next/standalone/server.js
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/opt/aigc-studio/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 3000 --workers 1
 Restart=on-failure
 RestartSec=3
 MemoryMax=512M
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
-ReadWritePaths=/var/lib/aigc-studio /opt/aigc-studio/data
+ReadWritePaths=/var/lib/aigc-studio
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+PrivateDevices=true
 
 [Install]
 WantedBy=multi-user.target

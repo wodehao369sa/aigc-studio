@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}任务记录 · AIGC Studio{% endblock %}
+{% block content %}
+<section class="page-heading">
+  <div>
+    <p class="eyebrow">GENERATION HISTORY</p>
+    <h1>任务记录</h1>
+    <p>查看提示词、模型、生成状态和成功结果。</p>
+  </div>
+</section>
+
+<form class="filter-bar" method="get" action="/tasks">
+  <select name="status">
+    <option value="">全部状态</option>
+    {% for value in statuses %}
+    <option value="{{ value }}" {{ "selected" if status == value }}>{{ value }}</option>
+    {% endfor %}
+  </select>
+  <select name="capability">
+    <option value="">全部能力</option>
+    {% for value in capabilities %}
+    <option value="{{ value }}" {{ "selected" if capability == value }}>{{ capability_labels[value] }}</option>
+    {% endfor %}
+  </select>
+  <button type="submit">筛选</button>
+</form>
+
+<div class="task-list" id="task-list">
+  {% for task in result.items %}
+  <div class="task-row" data-task-id="{{ task.id }}">
+    <a class="task-link" href="/tasks/{{ task.id }}">
+      {% if task.result_mime_type and task.result_mime_type.startswith("image/") %}
+        <img class="task-thumb-media" src="/api/thumbnail/{{ task.result_asset_id }}" alt="{{ task.prompt or "生成结果" }}" loading="lazy" />
+      {% else %}
+        <span class="task-thumb-placeholder">{{ "视频" if task.result_mime_type and task.result_mime_type.startswith("video/") else ("文本" if task.result_text else "结果") }}</span>
+      {% endif %}
+      <div class="task-main">
+        <div class="task-meta">
+          <span class="status {{ task.status }}">{{ task.status }}</span>
+          <strong>{{ task.model_name }}</strong>
+          <span>{{ capability_labels.get(task.capability, task.capability) }}</span>
+        </div>
+        <p class="task-prompt">{{ task.prompt or "无提示词" }}</p>
+        <div class="task-footer">
+          <span>{{ task.created_at | datetime }}</span>
+          <span>{{ task.progress }}%</span>
+        </div>
+      </div>
+    </a>
+    <div class="task-side">
+      {% if task.status == "failed" %}
+      <button class="retry-task" data-id="{{ task.id }}">重试</button>
+      {% endif %}
+      <button class="danger-button delete-task" data-id="{{ task.id }}">删除</button>
+    </div>
+  </div>
+  {% else %}
+  <p class="empty">还没有生成任务。</p>
+  {% endfor %}
+</div>
+
+<nav class="pagination" aria-label="分页">
+  {% if prev_url %}<a href="{{ prev_url }}">上一页</a>{% else %}<span class="disabled">上一页</span>{% endif %}
+  <span>第 {{ result.page }} / {{ total_pages }} 页 · 共 {{ result.total }} 项</span>
+  {% if next_url %}<a href="{{ next_url }}">下一页</a>{% else %}<span class="disabled">下一页</span>{% endif %}
+</nav>
+{% endblock %}

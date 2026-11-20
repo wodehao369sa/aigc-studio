@@ -1,0 +1,11 @@
+[Unit]
+Description=Run AIGC Studio polling every five seconds
+
+[Timer]
+OnBootSec=15s
+OnUnitActiveSec=10s
+AccuracySec=1s
+Unit=aigc-studio-poll.service
+
+[Install]
+WantedBy=timers.target

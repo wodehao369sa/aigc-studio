@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}{{ conversation.title or "对话" }} · AIGC Studio{% endblock %}
+{% block content %}
+<section class="page-heading chat-heading">
+  <div>
+    <p class="eyebrow">CONVERSATION</p>
+    <h1 id="conversation-title">{{ conversation.title or "新对话" }}</h1>
+    <p>{{ conversation.modelName or conversation.modelId }}</p>
+  </div>
+  <div class="actions">
+    <a href="/conversations">返回列表</a>
+    <button type="button" id="delete-conversation" class="danger-button">删除对话</button>
+  </div>
+</section>
+
+<div class="chat-layout">
+  <aside class="chat-sidebar">
+    <a class="new-chat" href="/conversations">＋ 新建对话</a>
+    <div class="chat-list">
+      {% for item in conversations %}
+      <a class="chat-list-row {{ "active" if item.id == conversation.id }}"
+         href="/conversations/{{ item.id }}">
+        <strong>{{ item.title or "新对话" }}</strong>
+        <small>{{ item.updatedAt | datetime }}</small>
+      </a>
+      {% else %}
+      <p class="hint">还没有对话。</p>
+      {% endfor %}
+    </div>
+  </aside>
+
+  <section class="panel chat-panel">
+    <div class="chat-messages" id="chat-messages">
+      {% for message in messages %}
+        {% if message.role == "system" %}
+          <div class="chat-message system"><div class="bubble">{{ message.content }}</div></div>
+        {% elif message.role == "user" %}
+          <div class="chat-message user">
+            <div class="bubble-wrap">
+              <span class="chat-meta">我</span>
+              <div class="bubble">{{ message.content }}</div>
+            </div>
+          </div>
+        {% else %}
+          <div class="chat-message assistant">
+            <div class="bubble-wrap">
+              <span class="chat-meta">Agnes{% if message.status == "pending" %} · 生成中{% endif %}</span>
+              <div class="bubble">{{ message.content }}{% if message.status == "pending" %} <span class="typing">…</span>{% endif %}</div>
+            </div>
+          </div>
+        {% endif %}
+      {% else %}
+        <p class="hint chat-empty">开始对话吧。</p>
+      {% endfor %}
+    </div>
+    <form id="chat-form" class="chat-input">
+      <textarea id="chat-prompt" placeholder="输入消息，Enter 发送，Shift+Enter 换行" required></textarea>
+      <button type="submit" class="primary" id="chat-send">发送</button>
+    </form>
+    <p class="error" id="chat-message" role="alert" hidden></p>
+  </section>
+</div>
+
+<script id="chat-data" type="application/json">{{ {"conversationId": conversation.id, "messages": messages} | tojson }}</script>
+{% endblock %}

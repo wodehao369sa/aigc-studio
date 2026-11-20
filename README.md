@@ -1,33 +1,122 @@
 # AIGC Studio
 
-个人自托管 AIGC 创作平台：Agnes Video 2.5 和 ModelScope 图像生成，单用户、SQLite、本地媒体目录与 Nginx Basic Auth。
+个人自托管 AIGC 创作平台。FastAPI 单体应用 + SQLite + 本地媒体目录 + Nginx
+Basic Auth，面向单用户、2C2G 服务器。服务商以可热插拔的 Provider 模块组织。
+
+第一版接入 Agnes AI 的三个模型：
+
+| 模型 | 能力 | 说明 |
+| --- | --- | --- |
+| `agnes-3.0-flash` | 文本生成 | `/v1/chat/completions`，同步返回文本 |
+| `agnes-image-2.5-flash` | 文生图、图生图 | `/v1/images/generations`，支持 1K-4K 档位与宽高比 |
+| `agnes-video-2.5-flash` | 文生视频、图生视频、首尾帧、图片参考 | `/v1/videos` 异步任务，720P |
+
+## 技术栈
+
+- Python 3.11+、FastAPI、Uvicorn
+- Jinja2 服务端模板 + 原生 JS（无前端构建）
+- SQLite（标准库 `sqlite3`）、本地文件系统媒体
+- httpx 调用外部服务商
+- systemd + Nginx 部署
 
 ## 本地运行
 
-1. `cp .env.example .env.local`，按需修改数据库、媒体目录和公网 URL。
-2. `cp providers.yaml.example providers.yaml`，写入 API Key；生产环境使用 `/etc/aigc-studio/providers.yaml` 并设置权限为 `0640`。
-3. `pnpm install && pnpm dev`。
-4. 在“设置”添加 ModelScope 图像模型及 Agnes `agnes-video-2.5` 模型。
-
-## Ubuntu 部署
-
-以 `aigc` 用户安装项目到 `/opt/aigc-studio`，运行 `pnpm install && pnpm build`。standalone 运行时由构建产物提供，因此构建完成后可删除开发依赖。复制 `deploy/environment.example` 到 `/etc/aigc-studio/environment`，复制提供方配置并限制文件权限。
-
-部署时必须让服务端 bundle 与浏览器静态资源来自同一次构建：将 `scripts/deploy-standalone.sh` 放在项目根目录执行。脚本会清理并同步 `.next/standalone` 和 `.next/static`，避免 HTML 引用的新 hash 在 Nginx 上找不到 CSS/JS。Nginx 的 `/_next/static/` 应指向 `/opt/aigc-studio/.next/standalone/.next/static/`，不要指向并行的 `/opt/aigc-studio/.next/static/`。
-
-安装 `deploy/aigc-studio.service`、`deploy/aigc-studio-poll.service`、`deploy/aigc-studio-poll.timer` 到 `/etc/systemd/system/`，执行 `systemctl daemon-reload && systemctl enable --now aigc-studio aigc-studio-poll.timer`。
-
-将 `deploy/nginx.conf` 安装为站点配置；示例复用服务器已有的 `/etc/nginx/.htpasswd`。站点监听 `8083`，因此访问地址为 `https://服务器公网IP:8083`；请同时在 Volcengine 安全组开放 TCP 8083。自签 IP 证书需包含 IP SAN，例如：
-
 ```bash
-openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-  -keyout /etc/aigc-studio/certs/server.key \
-  -out /etc/aigc-studio/certs/server.crt \
-  -subj '/CN=YOUR_PUBLIC_IP' -addext 'subjectAltName = IP:YOUR_PUBLIC_IP'
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+cp providers.yaml.example providers.yaml   # 填入 Agnes API Key
+.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 3000
 ```
 
-手机和电脑首次访问自签证书会显示安全警告，需手动信任。不要公开 3000 端口。
+打开 <http://127.0.0.1:3000>，在“设置 → 模型目录 → 添加模型”中选择 Agnes
+预设模型。需要对外提供参考图时，设置 `PUBLIC_BASE_URL`。
+
+## 服务商插件架构
+
+代码按服务商拆分，新增或移除服务商不改任务、素材和 API 层：
+
+```text
+app/providers/
+  base.py            # ProviderAdapter / ProviderDefinition / 运行时契约
+  __init__.py        # 启动时扫描子目录并注册
+  agnes/             # Agnes AI
+    definition.py    # PROVIDER_DEFINITION + create_adapter
+    adapter.py       # 请求映射、校验、状态归一化
+    models.py        # 三个模型的预设参数
+```
+
+新增服务商只需复制 `agnes/` 目录、改名并实现 `definition.py`，然后调用
+`POST /api/settings/providers/reload`。详见 `app/providers/README.md`。
+
+## 任务与轮询
+
+- `POST /api/tasks` 在短请求内完成校验、提交或记录同步结果，返回 `202`。
+- 应用内后台调度器每 `POLL_INTERVAL_SECONDS` 秒轮询一个未完成任务；视频任务
+  查询到结果后下载到本地媒体目录并转为 `succeeded`。
+- `POST /api/internal/poll` 只允许本机调用，用于手动触发一次轮询。
+- 每个服务商遵守 `max_concurrency`，默认 1，避免 2C2G 主机积压。
+- 图片结果在 `media/thumbs/` 生成 480px JPEG 缩略图并缓存，列表和详情默认使用
+  `/api/thumbnail/{id}`，原图仍通过 `/api/media/{id}` 提供（inline 预览 + 下载）。
+- 图生图/文生图把参考图以 **Base64 Data URI** 直接提交，不需要公网 URL；
+  视频参考图（图生视频/首尾帧/参考视频）必须是公网可访问的 URL，自签证书会
+  导致 Agnes 下载失败，可参考 `deploy/aigc-studio-reference-80.conf`。
+- 连续对话：`/conversations` 支持多轮对话，每轮是一个文本任务，自动携带
+  历史消息；刷新页面会恢复未完成的轮次。
+
+## 部署（Ubuntu + systemd + Nginx）
+
+```bash
+sudo useradd -r -m -d /opt/aigc-studio aigc
+sudo -u aigc git clone <repo> /opt/aigc-studio
+sudo -u aigc bash -c 'cd /opt/aigc-studio && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt'
+
+sudo mkdir -p /etc/aigc-studio /var/lib/aigc-studio
+sudo cp deploy/environment.example /etc/aigc-studio/environment
+sudo cp providers.yaml /etc/aigc-studio/providers.yaml   # 含真实 Key
+sudo chmod 640 /etc/aigc-studio/providers.yaml
+sudo cp deploy/aigc-studio.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now aigc-studio
+```
+
+Nginx 使用 `deploy/nginx.conf`（HTTPS 8083 + Basic Auth），并将
+`PUBLIC_BASE_URL` 设置为 `https://服务器公网IP:8083`。`/api/reference/` 由
+Nginx 放行给 Agnes 读取临时参考图，`/api/internal/poll` 仅允许 127.0.0.1。
 
 ## 备份
 
-定期执行 `scripts/backup.sh /mnt/backup/aigc-studio`。该脚本通过 SQLite 在线备份复制数据库，并归档本地媒体文件。恢复时停止服务，再恢复数据库和媒体目录。
+```bash
+./scripts/backup.sh /mnt/backup/aigc-studio
+```
+
+脚本用 SQLite 在线备份复制数据库，并打包媒体目录。恢复时停止应用，还原数据库
+与媒体目录。
+
+## 测试
+
+```bash
+.venv/bin/pip install -e '.[dev]'
+.venv/bin/python -m pytest
+```
+
+测试覆盖 Agnes 适配器（模拟上游）、任务状态机、并发上限、参考图 token、素材
+上传校验和设置 API。
+
+## 目录结构
+
+```text
+app/
+  main.py              # FastAPI 应用与生命周期
+  config.py            # 环境变量
+  db.py                # SQLite 连接与建表
+        repository.py      # 所有 SQL
+  entities.py          # 领域 dataclass
+  serializers.py       # 对外 JSON
+  catalog.py           # 能力枚举
+  providers/           # 可热插拔服务商模块
+  routers/             # 页面与 API
+  services/            # 媒体、素材、任务、设置、调度
+  templates/ static/   # Jinja2 模板与原生 JS/CSS
+tests/                 # pytest
+deploy/ scripts/       # systemd、Nginx、备份
+legacy-nextjs/         # 旧 Next.js 实现，仅作历史参考
+```

@@ -1,11 +1,22 @@
-node_modules
-.pnpm-store
-.next
-data
-media
-.env*
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# Runtime data and secrets
+data/
+media/
 providers.yaml
-coverage
-*.tsbuildinfo
+.env
+.env.local
+
+# Legacy Next.js reference implementation (kept for history only)
+legacy-nextjs/node_modules/
+legacy-nextjs/.next/
+legacy-nextjs/.pnpm-store/
+
+# OS / editor
 .DS_Store
-*.wav
+*.tsbuildinfo

@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}开始创作 · AIGC Studio{% endblock %}
+{% block content %}
+<section class="page-heading">
+  <div>
+    <p class="eyebrow">PERSONAL CREATIVE WORKSPACE</p>
+    <h1>开始创作</h1>
+    <p>选择模型、输入提示词并保存每一次生成结果。</p>
+  </div>
+  <div class="storage {{ "danger" if usage >= limit_bytes else ("warn" if usage >= warn_bytes else "") }}">
+    媒体使用量 {{ "%.2f"|format(usage / 1073741824) }} GB / {{ "%.0f"|format(limit_bytes / 1073741824) }} GB<br />
+    <small>
+      {% if usage >= limit_bytes %}已达到上限，请先删除任务或素材。
+      {% elif usage >= warn_bytes %}接近上限，请及时清理不需要的结果。
+      {% else %}本地媒体目录正常。{% endif %}
+    </small>
+  </div>
+</section>
+<div id="create-form"
+     data-models='{{ models | tojson }}'
+     data-labels='{{ capability_labels | tojson }}'
+     data-workspaces='{{ workspaces | tojson }}'></div>
+{% endblock %}
