@@ -112,6 +112,8 @@ app/providers/
   导致 Agnes 下载失败，可参考 `deploy/aigc-studio-reference-80.conf`。
 - 连续对话：`/conversations` 支持多轮对话，每轮是一个文本任务，自动携带
   历史消息；刷新页面会恢复未完成的轮次。
+- 收藏与标签：任务可加星收藏并打标签，`/gallery` 展示收藏且成功生成的作品，
+  可按标签筛选（标签接口 `GET /api/tags`）。
 
 ## 部署（Ubuntu + systemd + Nginx）
 

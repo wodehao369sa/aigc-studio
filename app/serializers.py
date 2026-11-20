@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .entities import Asset, Conversation, ModelConfig, Provider, Task, TaskDetail, TaskListResult, TaskSummary
+from .entities import Asset, Conversation, ModelConfig, Provider, Tag, Task, TaskDetail, TaskListResult, TaskSummary
 
 
 def asset_dict(asset: Asset) -> dict[str, Any]:
@@ -69,6 +69,8 @@ def task_dict(task: Task) -> dict[str, Any]:
         "parentTaskId": task.parent_task_id,
         "resultAssetId": task.result_asset_id,
         "conversationId": task.conversation_id,
+        "isFavorite": task.is_favorite,
+        "favoritedAt": task.favorited_at,
     }
 
 
@@ -76,6 +78,7 @@ def task_detail_dict(task: TaskDetail) -> dict[str, Any]:
     data = task_dict(task)
     data["modelName"] = task.model_name
     data["assets"] = [{"role": link.role, "asset": asset_dict(link.asset)} for link in task.assets]
+    data["tags"] = task.tags
     return data
 
 
@@ -94,6 +97,9 @@ def task_summary_dict(summary: TaskSummary) -> dict[str, Any]:
         "resultAssetId": summary.result_asset_id,
         "resultMimeType": summary.result_mime_type,
         "resultText": summary.result_text,
+        "isFavorite": summary.is_favorite,
+        "favoritedAt": summary.favorited_at,
+        "tags": summary.tags,
     }
 
 
@@ -103,6 +109,15 @@ def task_list_dict(result: TaskListResult) -> dict[str, Any]:
         "page": result.page,
         "pageSize": result.page_size,
         "total": result.total,
+    }
+
+
+def tag_dict(tag: Tag) -> dict[str, Any]:
+    return {
+        "id": tag.id,
+        "name": tag.name,
+        "createdAt": tag.created_at,
+        "count": tag.count,
     }
 
 

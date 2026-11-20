@@ -39,6 +39,7 @@
           <span class="status {{ task.status }}">{{ task.status }}</span>
           <strong>{{ task.model_name }}</strong>
           <span>{{ capability_labels.get(task.capability, task.capability) }}</span>
+          {% for name in task.tags %}<span class="tag-mini">{{ name }}</span>{% endfor %}
         </div>
         <p class="task-prompt">{{ task.prompt or "无提示词" }}</p>
         <div class="task-footer">
@@ -48,6 +49,11 @@
       </div>
     </a>
     <div class="task-side">
+      <button type="button" class="favorite-button compact {{ "active" if task.is_favorite }}"
+              data-id="{{ task.id }}" aria-pressed="{{ task.is_favorite }}"
+              title="{{ "取消收藏" if task.is_favorite else "收藏" }}">
+        <span aria-hidden="true">{{ "★" if task.is_favorite else "☆" }}</span>
+      </button>
       {% if task.status == "failed" %}
       <button class="retry-task" data-id="{{ task.id }}">重试</button>
       {% endif %}

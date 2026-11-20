@@ -32,6 +32,11 @@ class BulkDeleteRequest(BaseModel):
     ids: list[str] = Field(min_length=1, max_length=100)
 
 
+class UpdateTaskRequest(BaseModel):
+    favorite: bool | None = None
+    tags: list[str] | None = Field(default=None, max_length=50)
+
+
 def _validate_enum(value: str | None, allowed: list[str], label: str) -> None:
     if value is not None and value not in allowed:
         raise HTTPException(status_code=400, detail=f"无效的{label}。")
@@ -44,7 +49,11 @@ def list_tasks(
     pageSize: int = 20,
     status: str | None = None,
     capability: str | None = None,
+    favorite: bool = False,
+    tag: str | None = None,
 ):
+    status = status or None
+    capability = capability or None
     _validate_enum(status, TASK_STATUSES, "状态")
     _validate_enum(capability, CAPABILITIES, "能力")
     result = tasks_service.list_task_summaries(
@@ -53,6 +62,9 @@ def list_tasks(
         page_size=min(100, max(1, pageSize)),
         status=status,
         capability=capability,
+        favorite_only=favorite,
+        tag=tag,
+        order_by="favorited_at" if favorite else "created_at",
     )
     return task_list_dict(result)
 
@@ -83,6 +95,23 @@ def bulk_delete(request: Request, body: BulkDeleteRequest):
 
 @router.get("/api/tasks/{task_id}")
 def get_task(task_id: str, request: Request):
+    task = tasks_service.get_task_detail(request.app.state.ctx, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    return task_detail_dict(task)
+
+
+@router.patch("/api/tasks/{task_id}")
+def update_task(task_id: str, request: Request, body: UpdateTaskRequest):
+    try:
+        if body.favorite is not None:
+            tasks_service.set_favorite(request.app.state.ctx, task_id, body.favorite)
+        if body.tags is not None:
+            return task_detail_dict(
+                tasks_service.set_task_tags(request.app.state.ctx, task_id, body.tags)
+            )
+    except tasks_service.TaskError as error:
+        raise HTTPException(status_code=400, detail=str(error))
     task = tasks_service.get_task_detail(request.app.state.ctx, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")

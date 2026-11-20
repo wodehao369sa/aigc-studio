@@ -66,7 +66,21 @@ CREATE TABLE IF NOT EXISTS tasks (
     completed_at INTEGER,
     parent_task_id TEXT,
     result_asset_id TEXT,
-    conversation_id TEXT
+    conversation_id TEXT,
+    is_favorite INTEGER NOT NULL DEFAULT 0,
+    favorited_at INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS tags (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS task_tags (
+    task_id TEXT NOT NULL,
+    tag_id TEXT NOT NULL,
+    PRIMARY KEY (task_id, tag_id)
 );
 
 CREATE TABLE IF NOT EXISTS conversations (
@@ -99,6 +113,8 @@ INDEXES = """
 CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_tasks_status_created_at ON tasks(status, created_at);
 CREATE INDEX IF NOT EXISTS idx_tasks_conversation ON tasks(conversation_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_task_tags_tag ON task_tags(tag_id);
+CREATE INDEX IF NOT EXISTS idx_task_tags_task ON task_tags(task_id);
 CREATE INDEX IF NOT EXISTS idx_task_assets_task ON task_assets(task_id);
 CREATE INDEX IF NOT EXISTS idx_task_assets_asset ON task_assets(asset_id);
 CREATE INDEX IF NOT EXISTS idx_reference_tokens_task ON reference_tokens(task_id);
@@ -152,6 +168,12 @@ def _migrate(connection: sqlite3.Connection) -> None:
         connection.commit()
     if columns and "conversation_id" not in columns:
         connection.execute("ALTER TABLE tasks ADD COLUMN conversation_id TEXT")
+        connection.commit()
+    if columns and "is_favorite" not in columns:
+        connection.execute("ALTER TABLE tasks ADD COLUMN is_favorite INTEGER NOT NULL DEFAULT 0")
+        connection.commit()
+    if columns and "favorited_at" not in columns:
+        connection.execute("ALTER TABLE tasks ADD COLUMN favorited_at INTEGER")
         connection.commit()
 
 

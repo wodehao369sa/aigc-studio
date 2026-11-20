@@ -12,7 +12,7 @@ from fastapi.templating import Jinja2Templates
 from .. import repository
 from ..catalog import CAPABILITIES, CAPABILITY_LABELS, TASK_STATUSES, WORKSPACES
 from ..config import BASE_DIR, MEDIA_LIMIT_BYTES, MEDIA_WARN_BYTES
-from ..serializers import conversation_dict, model_dict, task_detail_dict
+from ..serializers import conversation_dict, model_dict, tag_dict, task_detail_dict
 from ..services import conversations as conversations_service
 from ..services import settings as settings_service
 from ..services import tasks as tasks_service
@@ -65,6 +65,8 @@ def tasks_page(
     status: str | None = None,
     capability: str | None = None,
 ):
+    status = status or None
+    capability = capability or None
     if status is not None and status not in TASK_STATUSES:
         raise HTTPException(status_code=400, detail="无效的状态。")
     if capability is not None and capability not in CAPABILITIES:
@@ -172,5 +174,47 @@ def chat_page(conversation_id: str, request: Request):
             "conversation": conversation_dict(conversation, model.name if model else None),
             "conversations": conversations,
             "messages": conversations_service.get_messages(ctx, conversation_id),
+        },
+    )
+
+
+@router.get("/gallery")
+def gallery_page(request: Request, page: int = 1, tag: str | None = None):
+    ctx = request.app.state.ctx
+    result = tasks_service.list_task_summaries(
+        ctx,
+        page=max(1, page),
+        page_size=24,
+        favorite_only=True,
+        tag=tag,
+        order_by="favorited_at",
+    )
+    total_pages = max(1, math.ceil(result.total / result.page_size))
+    tag_counts = repository.count_tags_in_favorites(ctx.db)
+    tags = [
+        {**tag_dict(item), "count": tag_counts.get(item.name, 0)}
+        for item in tasks_service.list_tags(ctx)
+        if tag_counts.get(item.name, 0) > 0
+    ]
+    return templates.TemplateResponse(
+        request,
+        "gallery.html",
+        {
+            "result": result,
+            "tags": tags,
+            "total_favorites": repository.count_favorite_results(ctx.db),
+            "active_tag": tag,
+            "capability_labels": CAPABILITY_LABELS,
+            "prev_url": (
+                f"/gallery?page={result.page - 1}{f'&tag={tag}' if tag else ''}"
+                if result.page > 1
+                else None
+            ),
+            "next_url": (
+                f"/gallery?page={result.page + 1}{f'&tag={tag}' if tag else ''}"
+                if result.page < total_pages
+                else None
+            ),
+            "total_pages": total_pages,
         },
     )

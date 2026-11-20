@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}收藏画廊 · AIGC Studio{% endblock %}
+{% block content %}
+<section class="page-heading">
+  <div>
+    <p class="eyebrow">FAVORITE GALLERY</p>
+    <h1>收藏画廊</h1>
+    <p>展示已收藏且成功生成的作品，可按标签筛选。</p>
+  </div>
+</section>
+
+<div class="tag-bar" id="tag-bar">
+  <a class="tag-chip {{ "active" if not active_tag }}" href="/gallery">全部（{{ total_favorites }}）</a>
+  {% for tag in tags %}
+  <a class="tag-chip {{ "active" if active_tag == tag.name }}"
+     href="/gallery?tag={{ tag.name | urlencode }}">{{ tag.name }}（{{ tag.count }}）</a>
+  {% endfor %}
+</div>
+
+<div id="gallery-grid" class="gallery-grid">
+  {% for task in result.items %}
+  <article class="gallery-card" data-task-id="{{ task.id }}">
+    <a class="gallery-link" href="/tasks/{{ task.id }}">
+      {% if task.result_mime_type and task.result_mime_type.startswith("image/") %}
+        <img class="task-thumb-media" src="/api/thumbnail/{{ task.result_asset_id }}" alt="{{ task.prompt or "收藏作品" }}" loading="lazy" />
+      {% else %}
+        <span class="task-thumb-placeholder">{{ "视频" if task.result_mime_type and task.result_mime_type.startswith("video/") else ("音频" if task.result_mime_type and task.result_mime_type.startswith("audio/") else "结果") }}</span>
+      {% endif %}
+      <div class="gallery-info">
+        <strong>{{ task.model_name }}</strong>
+        <p>{{ task.prompt or "无提示词" }}</p>
+        {% if task.tags %}
+        <small class="gallery-tags">{{ task.tags | join(" · ") }}</small>
+        {% endif %}
+      </div>
+    </a>
+    <div class="gallery-actions">
+      <button type="button" class="favorite-button compact active" data-id="{{ task.id }}" title="取消收藏">
+        <span aria-hidden="true">★</span>
+      </button>
+      {% if task.result_asset_id %}
+      <a href="/api/media/{{ task.result_asset_id }}" download>下载</a>
+      {% endif %}
+    </div>
+  </article>
+  {% else %}
+  <section class="panel gallery-empty">
+    <h2>还没有收藏内容</h2>
+    <p>在任务记录或任务详情中点击星标收藏，成功生成的结果会出现在这里。</p>
+  </section>
+  {% endfor %}
+</div>
+
+<nav class="pagination" aria-label="分页">
+  {% if prev_url %}<a href="{{ prev_url }}">上一页</a>{% else %}<span class="disabled">上一页</span>{% endif %}
+  <span>第 {{ result.page }} / {{ total_pages }} 页 · 共 {{ result.total }} 项</span>
+  {% if next_url %}<a href="{{ next_url }}">下一页</a>{% else %}<span class="disabled">下一页</span>{% endif %}
+</nav>
+
+<script id="gallery-data" type="application/json">{{ {"activeTag": active_tag} | tojson }}</script>
+{% endblock %}

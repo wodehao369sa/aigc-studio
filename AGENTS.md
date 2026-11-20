@@ -76,8 +76,8 @@ SQLite 表：`providers`、`models`、`assets`、`tasks`、`task_assets`、
 
 ## 已知范围与后续
 
-- 第一版聚焦核心链路；收藏、画廊、批量删除、模型参数可视化编辑暂缓。
-- 轮询失败目前直接置 `failed`，没有重试次数/退避；`max_concurrency` 已生效。
+- 第一版聚焦核心链路；批量删除、模型参数可视化编辑暂缓。收藏/标签/画廊已实现。
+- 轮询遇到瞬时上游错误（4xx/5xx/网络）会重试约 30 秒，仍失败才置 `failed`；`max_concurrency` 已生效。
 - `mediaUsage()` 每次递归扫描目录，规模变大后需要缓存或增量统计。
 - 旧 Next.js 实现已从仓库移除，不要在项目中重新引入 Node/Next 依赖。
 

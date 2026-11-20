@@ -90,3 +90,8 @@ def test_task_list_filters(client):
     assert response.status_code == 200
     assert response.json()["items"] == []
     assert client.get("/api/tasks?status=bogus").status_code == 400
+
+
+def test_task_list_empty_filter(client):
+    assert client.get("/tasks", params={"status": "", "capability": ""}).status_code == 200
+    assert client.get("/api/tasks", params={"status": "", "capability": ""}).status_code == 200

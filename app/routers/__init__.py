@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import FastAPI
 
-from . import assets, conversations, health, internal, media, models, pages, reference, settings, tasks, voices
+from . import assets, conversations, health, internal, media, models, pages, reference, settings, tags, tasks, voices
 
 
 def register_routers(app: FastAPI) -> None:
@@ -18,4 +18,5 @@ def register_routers(app: FastAPI) -> None:
     app.include_router(media.router)
     app.include_router(reference.router)
     app.include_router(voices.router)
+    app.include_router(tags.router)
     app.include_router(internal.router)

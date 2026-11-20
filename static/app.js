@@ -423,6 +423,83 @@ function initTaskDetail() {
     await api(`/api/tasks/${id}`, { method: "DELETE" });
     location.assign("/tasks");
   });
+
+  const favoriteButton = document.getElementById("favorite-task");
+  if (favoriteButton) {
+    favoriteButton.addEventListener("click", async () => {
+      const next = favoriteButton.getAttribute("aria-pressed") !== "true";
+      try {
+        const data = await api(`/api/tasks/${id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ favorite: next }),
+        });
+        favoriteButton.setAttribute("aria-pressed", String(data.isFavorite));
+        favoriteButton.classList.toggle("active", data.isFavorite);
+        favoriteButton.querySelector("span").textContent = data.isFavorite ? "★" : "☆";
+        favoriteButton.title = data.isFavorite ? "取消收藏" : "收藏";
+        task.isFavorite = data.isFavorite;
+      } catch (error) {
+        alert(error.message || "更新收藏失败");
+      }
+    });
+  }
+
+  let currentTags = [...(task.tags || [])];
+  const tagEditor = document.getElementById("tag-editor");
+  const tagInput = document.getElementById("tag-input");
+  const tagMessage = document.getElementById("tag-message");
+
+  function renderTags() {
+    if (!tagEditor || !tagInput) return;
+    tagEditor.querySelectorAll("span.tag-chip").forEach((node) => node.remove());
+    currentTags.forEach((name) => {
+      const chip = document.createElement("span");
+      chip.className = "tag-chip static";
+      chip.textContent = name;
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "tag-remove";
+      remove.dataset.name = name;
+      remove.title = "移除";
+      remove.textContent = "×";
+      remove.addEventListener("click", () => void saveTags(currentTags.filter((item) => item !== name)));
+      chip.appendChild(remove);
+      tagEditor.insertBefore(chip, tagInput);
+    });
+  }
+
+  async function saveTags(tags) {
+    try {
+      const data = await api(`/api/tasks/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ tags }),
+      });
+      currentTags = data.tags || [];
+      task.tags = currentTags;
+      renderTags();
+      if (tagMessage) {
+        tagMessage.textContent = "";
+        tagMessage.hidden = true;
+      }
+    } catch (error) {
+      if (tagMessage) {
+        tagMessage.textContent = error.message || "保存标签失败";
+        tagMessage.hidden = false;
+      }
+    }
+  }
+
+  if (tagInput) {
+    tagInput.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      const name = tagInput.value.trim();
+      if (!name) return;
+      if (!currentTags.includes(name)) void saveTags([...currentTags, name]);
+      tagInput.value = "";
+    });
+  }
+  renderTags();
 }
 
 // --- task list ---------------------------------------------------------------
@@ -436,6 +513,9 @@ function taskRowHTML(task) {
           : task.resultMimeType && task.resultMimeType.startsWith("audio/") ? "音频"
           : task.resultText ? "文本" : "结果"
         }</span>`;
+  const tags = (task.tags || [])
+    .map((name) => `<span class="tag-mini">${esc(name)}</span>`)
+    .join("");
   return `
     <div class="task-row" data-task-id="${task.id}">
       <a class="task-link" href="/tasks/${task.id}">
@@ -445,12 +525,18 @@ function taskRowHTML(task) {
             <span class="status ${task.status}">${task.status}</span>
             <strong>${esc(task.modelName)}</strong>
             <span>${esc(CAPABILITY_LABELS[task.capability] || task.capability)}</span>
+            ${tags}
           </div>
           <p class="task-prompt">${esc(task.prompt || "无提示词")}</p>
           <div class="task-footer"><span>${formatTime(task.createdAt)}</span><span>${task.progress}%</span></div>
         </div>
       </a>
       <div class="task-side">
+        <button type="button" class="favorite-button compact ${task.isFavorite ? "active" : ""}"
+                data-id="${task.id}" aria-pressed="${task.isFavorite}"
+                title="${task.isFavorite ? "取消收藏" : "收藏"}">
+          <span aria-hidden="true">${task.isFavorite ? "★" : "☆"}</span>
+        </button>
         ${task.status === "failed" ? `<button type="button" class="retry-task" data-id="${task.id}">重试</button>` : ""}
         <button type="button" class="danger-button delete-task" data-id="${task.id}">删除</button>
       </div>
@@ -477,6 +563,17 @@ function initTaskList() {
       button.addEventListener("click", async () => {
         const next = await api(`/api/tasks/${button.dataset.id}/retry`, { method: "POST" });
         location.assign(`/tasks/${next.id}`);
+      });
+    });
+    list.querySelectorAll(".favorite-button").forEach((button) => {
+      button.addEventListener("click", async (event) => {
+        event.preventDefault();
+        const next = button.getAttribute("aria-pressed") !== "true";
+        await api(`/api/tasks/${button.dataset.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ favorite: next }),
+        });
+        refresh();
       });
     });
   }
@@ -890,6 +987,28 @@ function initChat() {
   });
 }
 
+// --- gallery -----------------------------------------------------------------
+
+function initGallery() {
+  const grid = document.getElementById("gallery-grid");
+  if (!grid) return;
+  grid.querySelectorAll(".favorite-button").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const card = button.closest(".gallery-card");
+      await api(`/api/tasks/${button.dataset.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ favorite: false }),
+      });
+      if (card) card.remove();
+      if (!grid.querySelector(".gallery-card")) {
+        grid.innerHTML =
+          '<section class="panel gallery-empty"><h2>还没有收藏内容</h2>' +
+          "<p>在任务记录或任务详情中点击星标收藏，成功生成的结果会出现在这里。</p></section>";
+      }
+    });
+  });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   initCreateForm();
   initTaskDetail();
@@ -897,4 +1016,5 @@ document.addEventListener("DOMContentLoaded", () => {
   initSettings();
   initConversations();
   initChat();
+  initGallery();
 });

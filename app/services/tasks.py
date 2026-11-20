@@ -101,8 +101,34 @@ def list_task_summaries(
     page_size: int = 20,
     status: str | None = None,
     capability: str | None = None,
+    favorite_only: bool = False,
+    tag: str | None = None,
+    order_by: str = "created_at",
 ) -> TaskListResult:
-    return repository.list_task_summaries(ctx.db, page, page_size, status, capability)
+    return repository.list_task_summaries(
+        ctx.db, page, page_size, status, capability, favorite_only, tag, order_by
+    )
+
+
+def set_favorite(ctx, task_id: str, favorite: bool) -> Task:
+    task = repository.get_task(ctx.db, task_id)
+    if not task:
+        raise TaskError("任务不存在。")
+    now = _now()
+    repository.set_task_favorite(ctx.db, task_id, favorite, now if favorite else None)
+    return repository.get_task(ctx.db, task_id)  # type: ignore[return-value]
+
+
+def set_task_tags(ctx, task_id: str, names: list[str]) -> TaskDetail:
+    task = repository.get_task(ctx.db, task_id)
+    if not task:
+        raise TaskError("任务不存在。")
+    repository.set_task_tags(ctx.db, task_id, names, _now())
+    return repository.get_task_detail(ctx.db, task_id)  # type: ignore[return-value]
+
+
+def list_tags(ctx) -> list[Tag]:
+    return repository.list_tags(ctx.db)
 
 
 # --- provider runtime --------------------------------------------------------

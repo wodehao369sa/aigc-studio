@@ -17,6 +17,7 @@ from .entities import (
     Conversation,
     ModelConfig,
     Provider,
+    Tag,
     Task,
     TaskAssetLink,
     TaskDetail,
@@ -319,6 +320,8 @@ def _parse_task(row: sqlite3.Row) -> Task:
         parent_task_id=row["parent_task_id"],
         result_asset_id=row["result_asset_id"],
         conversation_id=row["conversation_id"] if "conversation_id" in row.keys() else None,
+        is_favorite=bool(row["is_favorite"]) if "is_favorite" in row.keys() else False,
+        favorited_at=row["favorited_at"] if "favorited_at" in row.keys() else None,
     )
 
 
@@ -328,7 +331,8 @@ def get_task(db: Database, task_id: str) -> Task | None:
         SELECT id, provider_id, model_id, capability, mode, parameters_json,
                status, progress, external_task_id, external_video_id, error,
                result_text, created_at, started_at, completed_at,
-               parent_task_id, result_asset_id, conversation_id
+               parent_task_id, result_asset_id, conversation_id,
+               is_favorite, favorited_at
         FROM tasks WHERE id = ?
         """,
         (task_id,),
@@ -343,8 +347,9 @@ def insert_task(db: Database, task: Task) -> None:
             id, provider_id, model_id, capability, mode, parameters_json,
             status, progress, external_task_id, external_video_id, error,
             result_text, created_at, started_at, completed_at,
-            parent_task_id, result_asset_id, conversation_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            parent_task_id, result_asset_id, conversation_id,
+            is_favorite, favorited_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             task.id,
@@ -365,6 +370,8 @@ def insert_task(db: Database, task: Task) -> None:
             task.parent_task_id,
             task.result_asset_id,
             task.conversation_id,
+            int(task.is_favorite),
+            task.favorited_at,
         ),
     )
 
@@ -414,6 +421,7 @@ def get_task_detail(db: Database, task_id: str) -> TaskDetail | None:
             **task.__dict__,
             "model_name": row["name"] if row else task.model_id,
             "assets": list_task_assets(db, task.id),
+            "tags": get_task_tags(db, task.id),
         }
     )
 
@@ -424,6 +432,9 @@ def list_task_summaries(
     page_size: int = 20,
     status: str | None = None,
     capability: str | None = None,
+    favorite_only: bool = False,
+    tag: str | None = None,
+    order_by: str = "created_at",
 ) -> TaskListResult:
     page = max(1, page)
     page_size = min(100, max(1, page_size))
@@ -436,11 +447,26 @@ def list_task_summaries(
     if capability:
         conditions.append("t.capability = ?")
         params.append(capability)
+    if favorite_only:
+        conditions.append("t.is_favorite = 1")
+        conditions.append("t.status = 'succeeded'")
+        conditions.append("t.result_asset_id IS NOT NULL")
+    if tag:
+        conditions.append(
+            "t.id IN (SELECT tt.task_id FROM task_tags tt "
+            "JOIN tags tg ON tg.id = tt.tag_id WHERE tg.name = ?)"
+        )
+        params.append(tag)
     where = (" WHERE " + " AND ".join(conditions)) if conditions else ""
 
     total_row = db.query_one(f"SELECT COUNT(*) AS count FROM tasks t{where}", params)
     total = int(total_row["count"]) if total_row else 0
 
+    order = (
+        "t.favorited_at DESC, t.created_at DESC"
+        if order_by == "favorited_at"
+        else "t.created_at DESC"
+    )
     rows = db.query(
         f"""
         SELECT
@@ -449,16 +475,17 @@ def list_task_summaries(
             COALESCE(m.name, t.model_id) AS model_name,
             t.created_at, t.completed_at, t.progress, t.error,
             t.result_asset_id, a.mime_type AS result_mime_type,
-            t.result_text
+            t.result_text, t.is_favorite, t.favorited_at
         FROM tasks t
         LEFT JOIN models m ON m.id = t.model_id
         LEFT JOIN assets a ON a.id = t.result_asset_id
         {where}
-        ORDER BY t.created_at DESC
+        ORDER BY {order}
         LIMIT ? OFFSET ?
         """,
         (*params, page_size, (page - 1) * page_size),
     )
+    tags_map = tags_for_tasks(db, [row["id"] for row in rows])
     items = [
         TaskSummary(
             id=row["id"],
@@ -474,6 +501,9 @@ def list_task_summaries(
             result_asset_id=row["result_asset_id"],
             result_mime_type=row["result_mime_type"],
             result_text=row["result_text"],
+            is_favorite=bool(row["is_favorite"]),
+            favorited_at=row["favorited_at"],
+            tags=tags_map.get(row["id"], []),
         )
         for row in rows
     ]
@@ -516,7 +546,127 @@ def count_running(db: Database, provider_id: str) -> int:
     return int(row["count"]) if row else 0
 
 
+# --- tags --------------------------------------------------------------------
+
+
+def _parse_tag(row: sqlite3.Row) -> Tag:
+    return Tag(
+        id=row["id"],
+        name=row["name"],
+        created_at=row["created_at"],
+        count=int(row["count"]) if "count" in row.keys() else 0,
+    )
+
+
+def list_tags(db: Database) -> list[Tag]:
+    rows = db.query(
+        """
+        SELECT t.id, t.name, t.created_at, COUNT(tt.task_id) AS count
+        FROM tags t
+        LEFT JOIN task_tags tt ON tt.tag_id = t.id
+        GROUP BY t.id
+        ORDER BY count DESC, t.name
+        """
+    )
+    return [_parse_tag(row) for row in rows]
+
+
+def get_task_tags(db: Database, task_id: str) -> list[str]:
+    rows = db.query(
+        """
+        SELECT t.name
+        FROM task_tags tt
+        JOIN tags t ON t.id = tt.tag_id
+        WHERE tt.task_id = ?
+        ORDER BY t.name
+        """,
+        (task_id,),
+    )
+    return [row["name"] for row in rows]
+
+
+def tags_for_tasks(db: Database, task_ids: list[str]) -> dict[str, list[str]]:
+    if not task_ids:
+        return {}
+    placeholders = ",".join("?" for _ in task_ids)
+    rows = db.query(
+        f"""
+        SELECT tt.task_id, t.name
+        FROM task_tags tt
+        JOIN tags t ON t.id = tt.tag_id
+        WHERE tt.task_id IN ({placeholders})
+        ORDER BY t.name
+        """,
+        task_ids,
+    )
+    result: dict[str, list[str]] = {task_id: [] for task_id in task_ids}
+    for row in rows:
+        result[row["task_id"]].append(row["name"])
+    return result
+
+
+def get_or_create_tag(db: Database, name: str, created_at: int) -> str:
+    row = db.query_one("SELECT id FROM tags WHERE name = ?", (name,))
+    if row:
+        return row["id"]
+    tag_id = new_id()
+    db.execute(
+        "INSERT INTO tags (id, name, created_at) VALUES (?, ?, ?)",
+        (tag_id, name, created_at),
+    )
+    return tag_id
+
+
+def set_task_tags(db: Database, task_id: str, names: list[str], created_at: int) -> None:
+    db.execute("DELETE FROM task_tags WHERE task_id = ?", (task_id,))
+    seen: set[str] = set()
+    for raw in names:
+        name = str(raw).strip()
+        if not name or len(name) > 40 or name in seen:
+            continue
+        seen.add(name)
+        tag_id = get_or_create_tag(db, name, created_at)
+        db.execute(
+            "INSERT OR IGNORE INTO task_tags (task_id, tag_id) VALUES (?, ?)",
+            (task_id, tag_id),
+        )
+
+
+def set_task_favorite(db: Database, task_id: str, favorite: bool, favorited_at: int | None) -> None:
+    db.execute(
+        "UPDATE tasks SET is_favorite = ?, favorited_at = ? WHERE id = ?",
+        (int(favorite), favorited_at, task_id),
+    )
+
+
+def count_favorite_results(db: Database) -> int:
+    row = db.query_one(
+        """
+        SELECT COUNT(*) AS count FROM tasks
+        WHERE conversation_id IS NULL AND is_favorite = 1
+          AND status = 'succeeded' AND result_asset_id IS NOT NULL
+        """
+    )
+    return int(row["count"]) if row else 0
+
+
+def count_tags_in_favorites(db: Database) -> dict[str, int]:
+    rows = db.query(
+        """
+        SELECT tg.name AS name, COUNT(DISTINCT t.id) AS count
+        FROM task_tags tt
+        JOIN tags tg ON tg.id = tt.tag_id
+        JOIN tasks t ON t.id = tt.task_id
+        WHERE t.conversation_id IS NULL AND t.is_favorite = 1
+          AND t.status = 'succeeded' AND t.result_asset_id IS NOT NULL
+        GROUP BY tg.id
+        """
+    )
+    return {row["name"]: int(row["count"]) for row in rows}
+
+
 def delete_task(db: Database, task_id: str) -> None:
+    db.execute("DELETE FROM task_tags WHERE task_id = ?", (task_id,))
     db.execute("DELETE FROM task_assets WHERE task_id = ?", (task_id,))
     db.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
 

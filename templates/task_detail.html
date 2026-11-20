@@ -17,6 +17,10 @@
     </p>
   </div>
   <div class="actions">
+    <button type="button" id="favorite-task" class="favorite-button {{ "active" if task.isFavorite }}"
+            aria-pressed="{{ "true" if task.isFavorite else "false" }}" title="{{ "取消收藏" if task.isFavorite else "收藏" }}">
+      <span aria-hidden="true">{{ "★" if task.isFavorite else "☆" }}</span>
+    </button>
     <button id="retry-task" {{ "hidden" if task.status != "failed" }}>重试</button>
     <button id="delete-task" class="danger-button">删除</button>
   </div>
@@ -56,6 +60,14 @@
   </dl>
   <h3>提示词</h3>
   <p class="task-detail-prompt">{{ task.parameters.get("prompt") or "无提示词" }}</p>
+  <h3>标签</h3>
+  <div class="tag-editor" id="tag-editor">
+    {% for name in task.tags %}
+    <span class="tag-chip static">{{ name }}<button type="button" class="tag-remove" data-name="{{ name }}" title="移除">×</button></span>
+    {% endfor %}
+    <input id="tag-input" placeholder="新增标签，回车添加" />
+  </div>
+  <p class="error" id="tag-message" role="alert" hidden></p>
 </section>
 
 <section class="panel">

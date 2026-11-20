@@ -67,6 +67,16 @@ class Task:
     parent_task_id: str | None
     result_asset_id: str | None
     conversation_id: str | None = None
+    is_favorite: bool = False
+    favorited_at: int | None = None
+
+
+@dataclass
+class Tag:
+    id: str
+    name: str
+    created_at: int
+    count: int = 0
 
 
 @dataclass
@@ -90,6 +100,7 @@ class TaskAssetLink:
 class TaskDetail(Task):
     model_name: str = ""
     assets: list[TaskAssetLink] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -107,6 +118,9 @@ class TaskSummary:
     result_asset_id: str | None
     result_mime_type: str | None
     result_text: str | None
+    is_favorite: bool
+    favorited_at: int | None
+    tags: list[str] = field(default_factory=list)
 
 
 @dataclass
