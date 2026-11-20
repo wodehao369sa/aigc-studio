@@ -55,6 +55,7 @@ function initCreateForm() {
   const workspaces = JSON.parse(root.dataset.workspaces);
   let capability = workspaces[0].modes[0];
   let modelId = "";
+  const selectedFiles = {};
 
   const modelsFor = (cap) => models.filter((model) => model.capabilities.includes(cap));
   const selectedModel = () => {
@@ -131,8 +132,13 @@ function initCreateForm() {
     const fileFields = roles
       .map(
         (role) =>
-          `<label>${roleLabel(role)}<input type="file" name="${role}" ` +
-          `accept="image/png,image/jpeg,image/webp" /></label>`,
+          `<div class="file-field">
+            <label>${roleLabel(role)}<input type="file" name="${role}" accept="image/png,image/jpeg,image/webp" /></label>
+            <div class="file-preview" data-role="${role}" hidden>
+              <button type="button" class="file-clear" data-role="${role}" title="移除">×</button>
+              <img alt="${roleLabel(role)}预览" />
+            </div>
+          </div>`,
       )
       .join("");
     const emptyHint = !model
@@ -159,7 +165,28 @@ function initCreateForm() {
           <p class="wide error" id="create-message" role="alert" hidden></p>
         </div>
       </form>`;
+    restoreFiles();
     bind();
+  }
+
+  function restoreFiles() {
+    Object.entries(selectedFiles).forEach(([role, file]) => {
+      const input = root.querySelector(`input[type="file"][name="${role}"]`);
+      if (!input) return;
+      try {
+        const transfer = new DataTransfer();
+        transfer.items.add(file);
+        input.files = transfer.files;
+      } catch {
+        /* older browsers: file cannot be restored */
+      }
+      const preview = root.querySelector(`.file-preview[data-role="${role}"]`);
+      const image = preview ? preview.querySelector("img") : null;
+      if (preview && image) {
+        image.src = URL.createObjectURL(file);
+        preview.hidden = false;
+      }
+    });
   }
 
   function bind() {
@@ -189,6 +216,41 @@ function initCreateForm() {
     }
     const form = root.querySelector("#create");
     form.addEventListener("submit", submit);
+    bindFileFields();
+  }
+
+  function bindFileFields() {
+    root.querySelectorAll('input[type="file"][name]').forEach((input) => {
+      input.addEventListener("change", () => {
+        const role = input.getAttribute("name");
+        const preview = root.querySelector(`.file-preview[data-role="${role}"]`);
+        const image = preview ? preview.querySelector("img") : null;
+        const file = input.files && input.files[0];
+        if (file) selectedFiles[role] = file;
+        else delete selectedFiles[role];
+        if (preview && image) {
+          if (file) {
+            image.src = URL.createObjectURL(file);
+            preview.hidden = false;
+          } else {
+            image.removeAttribute("src");
+            preview.hidden = true;
+          }
+        }
+      });
+    });
+    root.querySelectorAll(".file-clear").forEach((button) => {
+      button.addEventListener("click", () => {
+        const role = button.dataset.role;
+        const input = root.querySelector(`input[type="file"][name="${role}"]`);
+        const preview = root.querySelector(`.file-preview[data-role="${role}"]`);
+        const image = preview ? preview.querySelector("img") : null;
+        if (input) input.value = "";
+        delete selectedFiles[role];
+        if (image) image.removeAttribute("src");
+        if (preview) preview.hidden = true;
+      });
+    });
   }
 
   function showMessage(message) {
