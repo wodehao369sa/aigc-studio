@@ -35,7 +35,7 @@
       </a>
     {% endif %}
     <div class="result-links">
-      <a class="primary" href="/api/media/{{ asset.id }}" download>下载原图</a>
+      <a class="primary" href="/api/media/{{ asset.id }}" download>{{ "下载原片" if asset.mimeType.startswith("video/") else ("下载音频" if asset.mimeType.startswith("audio/") else "下载原图") }}</a>
     </div>
   {% elif task.resultText %}
     <div class="panel"><pre class="text-result">{{ task.resultText }}</pre></div>

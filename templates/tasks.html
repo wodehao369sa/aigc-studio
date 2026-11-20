@@ -32,7 +32,7 @@
       {% if task.result_mime_type and task.result_mime_type.startswith("image/") %}
         <img class="task-thumb-media" src="/api/thumbnail/{{ task.result_asset_id }}" alt="{{ task.prompt or "生成结果" }}" loading="lazy" />
       {% else %}
-        <span class="task-thumb-placeholder">{{ "视频" if task.result_mime_type and task.result_mime_type.startswith("video/") else ("文本" if task.result_text else "结果") }}</span>
+        <span class="task-thumb-placeholder">{{ "视频" if task.result_mime_type and task.result_mime_type.startswith("video/") else ("音频" if task.result_mime_type and task.result_mime_type.startswith("audio/") else ("文本" if task.result_text else "结果")) }}</span>
       {% endif %}
       <div class="task-main">
         <div class="task-meta">

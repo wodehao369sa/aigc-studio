@@ -3,3 +3,7 @@ providers:
     name: Agnes AI
     baseUrl: https://apihub.agnes-ai.com/v1
     apiKey: REPLACE_WITH_AGNES_API_KEY
+  - type: xiaomi_mimo
+    name: Xiaomi MiMo
+    baseUrl: https://api.xiaomimimo.com/v1
+    apiKey: REPLACE_WITH_XIAOMI_MIMO_API_KEY

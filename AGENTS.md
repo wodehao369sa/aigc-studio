@@ -7,8 +7,9 @@ AIGC Studio 是个人自托管的 AIGC 创作平台，用统一界面调用 Agne
 Nginx Basic Auth，面向单用户、2C2G 服务器。不要引入 PostgreSQL、Redis、消息
 队列、MinIO 等额外服务。
 
-第一版只接入 Agnes AI 三个模型：`agnes-3.0-flash`（文本）、
-`agnes-image-2.5-flash`（图片）、`agnes-video-2.5-flash`（视频）。
+第一版接入 Agnes AI 三个模型（`agnes-3.0-flash` 文本、`agnes-image-2.5-flash`
+图片、`agnes-video-2.5-flash` 视频），以及小米 MiMo 两个 TTS 模型
+（`mimo-v2.5-tts`、`mimo-v2.5-tts-voicedesign`）。
 
 ## 技术栈与运行
 
@@ -24,7 +25,7 @@ cp providers.yaml.example providers.yaml
 .venv/bin/python -m pytest
 ```
 
-`pnpm`、`next`、`node` 相关命令只属于 `legacy-nextjs/`，不要在新代码中使用。
+- 纯 Python/FastAPI 项目，不再保留 Node.js/Next.js 代码或依赖。
 
 ## 核心约束
 
@@ -75,7 +76,7 @@ SQLite 表：`providers`、`models`、`assets`、`tasks`、`task_assets`、
 - 第一版聚焦核心链路；收藏、画廊、批量删除、模型参数可视化编辑暂缓。
 - 轮询失败目前直接置 `failed`，没有重试次数/退避；`max_concurrency` 已生效。
 - `mediaUsage()` 每次递归扫描目录，规模变大后需要缓存或增量统计。
-- 旧 Next.js 实现保留在 `legacy-nextjs/`，仅作参考，不要在其上继续开发。
+- 旧 Next.js 实现已从仓库移除，不要在项目中重新引入 Node/Next 依赖。
 
 ## 敏感信息
 

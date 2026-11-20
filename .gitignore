@@ -12,11 +12,5 @@ providers.yaml
 .env
 .env.local
 
-# Legacy Next.js reference implementation (kept for history only)
-legacy-nextjs/node_modules/
-legacy-nextjs/.next/
-legacy-nextjs/.pnpm-store/
-
 # OS / editor
 .DS_Store
-*.tsbuildinfo

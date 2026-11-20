@@ -155,8 +155,8 @@ function initCreateForm() {
           <label>模型
             <select name="modelId">${modelOptions}</select>
           </label>
-          <label class="wide">提示词
-            <textarea name="prompt" required placeholder="描述主体、动作、环境、镜头和风格"></textarea>
+          <label class="wide">${capability === "text_to_speech" ? "要朗读的文本" : "提示词"}
+            <textarea name="prompt" required placeholder="${capability === "text_to_speech" ? "输入需要合成的文本" : "描述主体、动作、环境、镜头和风格"}"></textarea>
           </label>
           ${parameterFields}
           ${fileFields}
@@ -312,7 +312,7 @@ function resultHTML(task) {
       return `<video src="/api/media/${asset.id}" controls></video><div class="result-links"><a class="primary" href="/api/media/${asset.id}" download>下载原片</a></div>`;
     }
     if (asset.mimeType.startsWith("audio/")) {
-      return `<audio src="/api/media/${asset.id}" controls></audio><div class="result-links"><a class="primary" href="/api/media/${asset.id}" download>下载原文件</a></div>`;
+      return `<audio src="/api/media/${asset.id}" controls></audio><div class="result-links"><a class="primary" href="/api/media/${asset.id}" download>下载音频</a></div>`;
     }
     return `<a class="result-thumb-link" href="/api/media/${asset.id}" target="_blank" rel="noopener"><img class="result-thumb" src="/api/thumbnail/${asset.id}" alt="生成结果" /></a><div class="result-links"><a class="primary" href="/api/media/${asset.id}" download>下载原图</a></div>`;
   }
@@ -378,7 +378,9 @@ function taskRowHTML(task) {
     task.resultMimeType && task.resultMimeType.startsWith("image/") && task.resultAssetId
       ? `<img class="task-thumb-media" src="/api/thumbnail/${task.resultAssetId}" alt="${esc(task.prompt || "生成结果")}" loading="lazy" />`
       : `<span class="task-thumb-placeholder">${
-          task.resultMimeType && task.resultMimeType.startsWith("video/") ? "视频" : task.resultText ? "文本" : "结果"
+          task.resultMimeType && task.resultMimeType.startsWith("video/") ? "视频"
+          : task.resultMimeType && task.resultMimeType.startsWith("audio/") ? "音频"
+          : task.resultText ? "文本" : "结果"
         }</span>`;
   return `
     <div class="task-row" data-task-id="${task.id}">

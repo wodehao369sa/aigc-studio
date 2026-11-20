@@ -3,13 +3,25 @@
 个人自托管 AIGC 创作平台。FastAPI 单体应用 + SQLite + 本地媒体目录 + Nginx
 Basic Auth，面向单用户、2C2G 服务器。服务商以可热插拔的 Provider 模块组织。
 
-第一版接入 Agnes AI 的三个模型：
+接入的服务商与模型：
+
+**Agnes AI**
 
 | 模型 | 能力 | 说明 |
 | --- | --- | --- |
 | `agnes-3.0-flash` | 文本生成 | `/v1/chat/completions`，同步返回文本 |
 | `agnes-image-2.5-flash` | 文生图、图生图 | `/v1/images/generations`，支持 1K-4K 档位与宽高比 |
 | `agnes-video-2.5-flash` | 文生视频、图生视频、首尾帧、图片参考 | `/v1/videos` 异步任务，720P |
+
+**Xiaomi MiMo（语音合成）**
+
+| 模型 | 能力 | 说明 |
+| --- | --- | --- |
+| `mimo-v2.5-tts` | 文本转语音 | 预置音色（mimo_default / 冰糖 / 茉莉 / 苏打 / 白桦 / Mia / Chloe / Milo / Dean） |
+| `mimo-v2.5-tts-voicedesign` | 文本转语音 | 用文字描述设计音色，填写「音色与风格描述」 |
+
+MiMo 使用 OpenAI 兼容的 `/v1/chat/completions`，认证头为 `api-key`，音频以
+Base64 内联返回，同步生成。
 
 ## 技术栈
 
@@ -43,6 +55,7 @@ app/providers/
     definition.py    # PROVIDER_DEFINITION + create_adapter
     adapter.py       # 请求映射、校验、状态归一化
     models.py        # 三个模型的预设参数
+  xiaomi_mimo/       # 小米 MiMo TTS（结构相同）
 ```
 
 新增服务商只需复制 `agnes/` 目录、改名并实现 `definition.py`，然后调用
@@ -118,5 +131,4 @@ app/
   templates/ static/   # Jinja2 模板与原生 JS/CSS
 tests/                 # pytest
 deploy/ scripts/       # systemd、Nginx、备份
-legacy-nextjs/         # 旧 Next.js 实现，仅作历史参考
 ```

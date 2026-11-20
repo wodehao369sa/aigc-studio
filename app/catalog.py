@@ -10,6 +10,7 @@ CAPABILITIES = [
     "image_to_video",
     "keyframe_video",
     "reference_video",
+    "text_to_speech",
 ]
 
 CAPABILITY_LABELS = {
@@ -20,6 +21,7 @@ CAPABILITY_LABELS = {
     "image_to_video": "图生视频",
     "keyframe_video": "首尾帧视频",
     "reference_video": "图片参考视频",
+    "text_to_speech": "文本转语音",
 }
 
 # Ordered groups used by the create page workspace switch.
@@ -27,6 +29,7 @@ WORKSPACES = [
     {"label": "文本", "modes": ["text_generation"]},
     {"label": "图片", "modes": ["text_to_image", "image_to_image"]},
     {"label": "视频", "modes": ["text_to_video", "image_to_video", "keyframe_video", "reference_video"]},
+    {"label": "语音", "modes": ["text_to_speech"]},
 ]
 
 TASK_STATUSES = ["pending", "running", "succeeded", "failed"]

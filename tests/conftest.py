@@ -24,6 +24,10 @@ os.environ["POLL_INTERVAL_SECONDS"] = "3600"
     "  - type: agnes\n"
     "    name: Agnes AI\n"
     "    baseUrl: https://apihub.agnes-ai.com/v1\n"
+    "    apiKey: test-key\n"
+    "  - type: xiaomi_mimo\n"
+    "    name: Xiaomi MiMo\n"
+    "    baseUrl: https://api.xiaomimimo.com/v1\n"
     "    apiKey: test-key\n",
     encoding="utf-8",
 )
