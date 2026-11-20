@@ -37,13 +37,46 @@ ModelScope 使用异步任务：`POST /v1/images/generations`（`X-ModelScope-As
 Base64 Data URI 通过 `image_url` 提交。
 
 **Fish Audio（语音合成）**
-
 | 模型 | 能力 | 说明 |
 | --- | --- | --- |
 | `s2.1-pro-free` | 文本转语音 | S2.1 Pro 免费模型，83 种语言，支持多说话人对话 |
 
 Fish Audio 使用 `POST /v1/tts`（`Authorization: Bearer` + `model` 头），同步返回音频，
 可选 `format`（mp3/wav/opus/pcm）、`reference_id`（音色）、`seed`、`latency`。
+
+**OpenAI 兼容（文本/对话）**
+
+| 模型 | 能力 | 说明 |
+| --- | --- | --- |
+| 任意 `/v1/models` 返回的模型 | 文本生成、文生图、图生图 | 文本走 `/v1/chat/completions`；文生图走 `/v1/images/generations`；图生图走 `/v1/images/edits`（失败回退到 generations + base64） |
+
+在 `providers.yaml` 配置 `type: openai_compatible` + `baseUrl` + `apiKey`，然后在
+「设置 → 服务连接」点「从 /v1/models 同步模型」，模型会入库并出现在创作页的
+文本模式、图片模式与对话页的模型选择中。同步后可在设置里调整每个模型的能力与
+参数（例如只保留文本能力）。
+
+**多站点**：同一 `type` 可配置多条，用唯一 `id` 区分：
+
+```yaml
+providers:
+  - type: openai_compatible
+    id: openai-main          # 省略 id 时默认等于 type
+    name: OpenAI 官方
+    baseUrl: https://api.openai.com/v1
+    apiKey: sk-xxx
+  - type: openai_compatible
+    id: openai-site-a
+    name: 站点 A
+    baseUrl: https://a.example.com/v1
+    apiKey: sk-aaa
+  - type: openai_compatible
+    id: openai-site-b
+    name: 站点 B
+    baseUrl: https://b.example.com/v1
+    apiKey: sk-bbb
+```
+
+每个实例在设置页有各自的「同步模型」按钮，模型按实例隔离。
 
 **Breeze（语音合成）**
 
@@ -92,6 +125,7 @@ app/providers/
   xiaomi_mimo/       # 小米 MiMo TTS（结构相同）
   modelscope/        # ModelScope API-Inference（异步图片任务）
   fish_audio/        # Fish Audio TTS
+  openai_compatible/ # OpenAI 兼容文本/对话（/v1/models 自动发现）
   breeze/            # Breeze TTS
 ```
 

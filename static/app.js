@@ -746,6 +746,22 @@ function initSettings() {
   document.querySelectorAll(".provider-concurrency").forEach((input) => {
     input.addEventListener("change", () => saveProvider(input.dataset.id));
   });
+  document.querySelectorAll(".sync-openai").forEach((button) => {
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      try {
+        const result = await api(
+          `/api/settings/openai-compatible/sync?provider=${encodeURIComponent(button.dataset.id)}`,
+          { method: "POST" }
+        );
+        alert(`同步完成：获取 ${result.fetched} 个，新增 ${result.created} 个。`);
+        location.reload();
+      } catch (error) {
+        alert(error.message || "同步失败");
+        button.disabled = false;
+      }
+    });
+  });
 
   async function saveProvider(id) {
     const enabled = document.querySelector(`.provider-enabled[data-id="${id}"]`).checked;

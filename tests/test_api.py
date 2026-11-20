@@ -78,6 +78,7 @@ def test_provider_reload(client):
         "breeze",
         "fish_audio",
         "modelscope",
+        "openai_compatible",
         "xiaomi_mimo",
     ]
     assert all(item["configured"] for item in providers)

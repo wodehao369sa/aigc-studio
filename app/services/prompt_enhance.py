@@ -360,11 +360,12 @@ def ensure_defaults(ctx) -> None:
         logger.warning("bundled prompt presets are unavailable at %s", PRESET_DIR)
         return
     enhancers = repository.list_models(ctx.db, None, "text_generation", False)
-    if enhancers:
-        general = _seed_template(ctx, GENERAL_NAME, "general.txt")
-        if repository.get_enhance_config(ctx.db) is None:
-            repository.set_enhance_config(ctx.db, True, general.id, enhancers[0].id, _now())
+    if not enhancers:
+        return
     enhancer = enhancers[0]
+    general = _seed_template(ctx, GENERAL_NAME, "general.txt")
+    if repository.get_enhance_config(ctx.db) is None:
+        repository.set_enhance_config(ctx.db, True, general.id, enhancer.id, _now())
     for model in repository.list_models(ctx.db):
         if model.external_model_id != QWEN_MODEL_ID or not model.enabled:
             continue

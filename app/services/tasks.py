@@ -74,7 +74,8 @@ def list_models(
     capability: str | None = None,
     include_disabled: bool = False,
 ) -> list[ModelConfig]:
-    return repository.list_models(ctx.db, ctx.registry.ids(), capability, include_disabled)
+    provider_ids = [provider.id for provider in repository.list_providers(ctx.db)]
+    return repository.list_models(ctx.db, provider_ids, capability, include_disabled)
 
 
 def get_model(ctx, model_id: str) -> ModelConfig | None:
@@ -137,7 +138,7 @@ def list_tags(ctx) -> list[Tag]:
 
 
 def build_runtime(ctx, provider: Provider) -> ProviderRuntime:
-    config = get_provider_config(ctx.provider_configs, provider.provider_type)
+    config = get_provider_config(ctx.provider_configs, provider.id)
     return ProviderRuntime(
         provider_id=provider.provider_type,
         base_url=config.base_url,
@@ -271,7 +272,7 @@ async def create_task(
     )
     if needs_public_url and asset_map and not ctx.public_base_url:
         raise TaskError("该能力需要公网可访问的参考图，请在环境变量中配置 PUBLIC_BASE_URL。")
-    config = ctx.provider_configs.get(provider.provider_type)
+    config = ctx.provider_configs.get(provider.id)
     if config is None or not config.configured:
         raise TaskError(f"{provider.provider_type} 服务尚未在 providers.yaml 中配置 API Key。")
 

@@ -6,7 +6,9 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from ..serializers import model_dict
+from ..services import openai_compatible as openai_service
 from ..services import settings as settings_service
+from ..services.openai_compatible import OpenAICompatibleError
 from ..services.settings import SettingsError
 
 router = APIRouter()
@@ -57,6 +59,14 @@ def update_provider(request: Request, body: ProviderUpdateRequest):
 @router.post("/api/settings/providers/reload")
 def reload_providers(request: Request):
     return settings_service.reload_providers(request.app.state.ctx)
+
+
+@router.post("/api/settings/openai-compatible/sync")
+async def sync_openai_compatible_models(request: Request, provider: str | None = None):
+    try:
+        return await openai_service.sync_models(request.app.state.ctx, provider or "openai_compatible")
+    except OpenAICompatibleError as error:
+        raise HTTPException(status_code=400, detail=str(error))
 
 
 @router.get("/api/settings/presets")

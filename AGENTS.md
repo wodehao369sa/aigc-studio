@@ -42,11 +42,18 @@ cp providers.yaml.example providers.yaml
   和 `create_adapter`。
 - 启动时 `app/providers/__init__.py` 扫描并注册；新增/删除模块后调用
   `POST /api/settings/providers/reload` 即可热插拔。
+- `providers.yaml` 里每个条目可用唯一 `id` 表示一个实例（默认等于 `type`）；
+  同一 `type` 可配多个实例（如多个 OpenAI 兼容站点），provider 行 id = 实例 id，
+  `provider_type` = 适配器类型，模型与运行时配置按实例 id 关联。
 - 适配器接口只有 `validate` / `submit` / `get_status`，详见
   `app/providers/README.md`。
 - 任务、素材、API 层不得出现服务商特判；所有上游差异放适配器。
 - 同步能力（文本、图片）在 `submit` 中直接返回结果；异步能力（视频）返回
   外部任务 ID，由应用内调度器轮询。
+- `openai_compatible` 通过远程 `/v1/models` 发现模型，文本走
+  `POST /v1/chat/completions`，图片走 `/v1/images/generations`（图生图用
+  `/v1/images/edits`，不支持时回退）；在设置页点「同步模型」入库后即可在
+  创作/对话中选择。同一 `type` 可用唯一 `id` 配置多个站点（多实例）。
 
 ## 数据模型
 

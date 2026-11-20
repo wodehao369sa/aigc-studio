@@ -25,9 +25,9 @@ def list_providers(ctx) -> list[dict[str, Any]]:
     registered = set(ctx.registry.ids())
     result: list[dict[str, Any]] = []
     for provider in repository.list_providers(ctx.db):
-        if provider.id not in registered:
+        if provider.provider_type not in registered:
             continue
-        config = ctx.provider_configs.get(provider.provider_type)
+        config = ctx.provider_configs.get(provider.id)
         result.append(
             {
                 "id": provider.id,
@@ -73,11 +73,11 @@ def sync_provider_rows(ctx) -> None:
     registered = list(ctx.provider_configs.keys())
     for provider_id in registered:
         config = ctx.provider_configs[provider_id]
-        definition = ctx.registry.get(provider_id)
+        definition = ctx.registry.get(config.provider_type)
         repository.upsert_provider(
             ctx.db,
             provider_id=provider_id,
-            provider_type=provider_id,
+            provider_type=config.provider_type,
             name=config.name or (definition.label if definition else provider_id),
             base_url=config.base_url or (definition.default_base_url if definition else ""),
             enabled=True,
@@ -202,7 +202,8 @@ def _model_from_payload(ctx, payload: dict[str, Any], model_id: str | None) -> M
 
 
 def list_models(ctx, capability: str | None = None, include_disabled: bool = False) -> list[ModelConfig]:
-    return repository.list_models(ctx.db, ctx.registry.ids(), capability, include_disabled)
+    provider_ids = [provider.id for provider in repository.list_providers(ctx.db)]
+    return repository.list_models(ctx.db, provider_ids, capability, include_disabled)
 
 
 def create_model(ctx, payload: dict[str, Any]) -> ModelConfig:

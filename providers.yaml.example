@@ -19,3 +19,18 @@ providers:
     name: Breeze
     baseUrl: https://api.breeze.blue/v1
     apiKey: REPLACE_WITH_BREEZE_API_KEY
+  - type: openai_compatible
+    name: OpenAI Compatible
+    baseUrl: https://YOUR_OPENAI_COMPATIBLE_HOST/v1
+    apiKey: REPLACE_WITH_OPENAI_COMPATIBLE_API_KEY
+  # 同一 type 可配置多个站点：用唯一 id 区分
+  - type: openai_compatible
+    id: openai-site-a
+    name: 站点 A
+    baseUrl: https://a.example.com/v1
+    apiKey: REPLACE_WITH_SITE_A_API_KEY
+  - type: openai_compatible
+    id: openai-site-b
+    name: 站点 B
+    baseUrl: https://b.example.com/v1
+    apiKey: REPLACE_WITH_SITE_B_API_KEY

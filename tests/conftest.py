@@ -40,6 +40,10 @@ os.environ["POLL_INTERVAL_SECONDS"] = "3600"
     "  - type: breeze\n"
     "    name: Breeze\n"
     "    baseUrl: https://api.breeze.blue/v1\n"
+    "    apiKey: test-key\n"
+    "  - type: openai_compatible\n"
+    "    name: OpenAI Compatible\n"
+    "    baseUrl: https://compatible.example.com/v1\n"
     "    apiKey: test-key\n",
     encoding="utf-8",
 )
