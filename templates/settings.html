@@ -13,6 +13,7 @@
   <div class="segments">
     <button type="button" id="tab-connections" aria-pressed="true">服务连接</button>
     <button type="button" id="tab-models" aria-pressed="false">模型目录</button>
+    <button type="button" id="tab-enhance" aria-pressed="false">提示词增强</button>
     <button type="button" id="reload-providers">重新加载服务商</button>
   </div>
 
@@ -92,8 +93,98 @@
     </form>
     <p id="settings-message" class="error" role="alert"></p>
   </section>
+
+  <section id="enhance" hidden>
+    <div class="section-toolbar">
+      <h2>增强提示词模板</h2>
+      <button type="button" id="add-template" class="primary">新增模板</button>
+    </div>
+    <div id="template-list">
+      {% for template in prompt_templates %}
+      <div class="catalog-row" data-id="{{ template.id }}">
+        <div>
+          <strong>{{ template.name }}</strong><br />
+          <pre class="template-content">{{ template.content }}</pre>
+        </div>
+        <div class="actions">
+          <button type="button" class="edit-template" data-id="{{ template.id }}">编辑</button>
+          <button type="button" class="danger-button delete-template" data-id="{{ template.id }}">删除</button>
+        </div>
+      </div>
+      {% else %}
+      <p class="hint">暂无模板。</p>
+      {% endfor %}
+    </div>
+    <form id="template-form" class="panel form-grid" hidden>
+      <h2 class="wide" id="template-form-title">新增模板</h2>
+      <label>名称<input id="template-name" required /></label>
+      <label class="wide">内容（<span id="template-vars-hint">可用 {{ "{{prompt}}" }} / {{ "{{model}}" }} / {{ "{{capability}}" }} / {{ "{{has_reference}}" }}）</span>
+        <textarea id="template-content" required></textarea>
+      </label>
+      <label class="wide inline-check"><input type="checkbox" id="template-as-system" />作为系统提示词（内容作为 system，用户提示词自动作为 user）</label>
+      <div class="actions wide">
+        <button type="submit" class="primary">保存</button>
+        <button type="button" id="cancel-template">取消</button>
+      </div>
+    </form>
+
+    <h2>全局默认</h2>
+    <p class="hint">未单独绑定模板的图片模型，将使用下面的全局默认（可关闭）。</p>
+    <div class="panel global-enhance">
+      <label class="inline-check"><input type="checkbox" id="global-enabled" {{ "checked" if enhance_default.enabled }} />启用全局默认</label>
+      <label>默认模板
+        <select id="global-template">
+          <option value="">选择模板</option>
+          {% for t in prompt_templates %}<option value="{{ t.id }}" {{ "selected" if enhance_default.templateId == t.id }}>{{ t.name }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>增强模型
+        <select id="global-enhancer">
+          <option value="">选择文本模型</option>
+          {% for tm in text_models %}<option value="{{ tm.id }}" {{ "selected" if enhance_default.enhancerModelId == tm.id }}>{{ tm.name }}</option>{% endfor %}
+        </select>
+      </label>
+      <div class="actions"><button type="button" class="primary" id="global-save">保存全局默认</button></div>
+    </div>
+
+    <h2>模型绑定</h2>
+    <p class="hint">为图片模型绑定可用模板，并指定增强所用文本模型与默认项。</p>
+    <div id="binding-list">
+      {% for model in image_models %}
+      <div class="panel binding-model" data-model="{{ model.id }}">
+        <strong>{{ model.name }}</strong>
+        <div class="binding-rows" data-model="{{ model.id }}">
+          {% for binding in bindings[model.id] %}
+          <div class="binding-row" data-template="{{ binding.templateId }}">
+            <select class="binding-template">
+              {% for t in prompt_templates %}<option value="{{ t.id }}" {{ "selected" if t.id == binding.templateId }}>{{ t.name }}</option>{% endfor %}
+            </select>
+            <select class="binding-enhancer">
+              {% for tm in text_models %}<option value="{{ tm.id }}" {{ "selected" if tm.id == binding.enhancerModelId }}>{{ tm.name }}</option>{% endfor %}
+            </select>
+            <select class="binding-capability">
+              <option value="">全部能力</option>
+              <option value="text_to_image" {{ "selected" if binding.capability == "text_to_image" }}>文生图</option>
+              <option value="image_to_image" {{ "selected" if binding.capability == "image_to_image" }}>图生图</option>
+            </select>
+            <label class="inline-check"><input type="radio" name="default-{{ model.id }}" class="binding-default" {{ "checked" if binding.isDefault }} />默认</label>
+            <button type="button" class="danger-button binding-remove">删除</button>
+          </div>
+          {% endfor %}
+        </div>
+        <div class="actions">
+          <button type="button" class="binding-add" data-model="{{ model.id }}">添加绑定</button>
+          <button type="button" class="primary binding-save" data-model="{{ model.id }}">保存</button>
+        </div>
+      </div>
+      {% else %}
+      <p class="hint">暂无图片模型。</p>
+      {% endfor %}
+    </div>
+    <p id="enhance-message" class="error" role="alert"></p>
+  </section>
 </div>
 
 <script id="settings-data"
-        type="application/json">{{ {"providers": providers, "models": models, "presets": presets, "labels": capability_labels} | tojson }}</script>
+        type="application/json">{{ {"providers": providers, "models": models, "presets": presets, "labels": capability_labels, "promptTemplates": prompt_templates, "imageModels": image_models, "textModels": text_models, "bindings": bindings} | tojson }}</script>
 {% endblock %}

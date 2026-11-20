@@ -60,6 +60,15 @@
   </dl>
   <h3>提示词</h3>
   <p class="task-detail-prompt">{{ task.parameters.get("prompt") or "无提示词" }}</p>
+  {% if task.promptTemplateId or task.enhancedPrompt or task.enhanceError %}
+  <h3>提示词增强</h3>
+  <dl class="task-detail-meta">
+    <div><dt>原始提示词</dt><dd>{{ task.originalPrompt or task.parameters.get("prompt") or "—" }}</dd></div>
+    {% if task.enhancedPrompt %}<div><dt>增强后</dt><dd>{{ task.enhancedPrompt }}</dd></div>{% endif %}
+    <div><dt>模板</dt><dd>{{ task.promptTemplateId or "—" }}</dd></div>
+  </dl>
+  {% if task.enhanceError %}<p class="error">增强失败，已回退原提示词：{{ task.enhanceError }}</p>{% endif %}
+  {% endif %}
   <h3>标签</h3>
   <div class="tag-editor" id="tag-editor">
     {% for name in task.tags %}

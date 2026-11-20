@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import json
 import logging
 import secrets
 import threading
@@ -30,6 +31,7 @@ from ..providers.base import (
 from ..provider_config import get_provider_config
 from .assets import create_result_asset, delete_task_assets
 from .media import extension_for_mime
+from . import prompt_enhance
 
 logger = logging.getLogger(__name__)
 
@@ -182,14 +184,45 @@ def _build_asset_inputs(
     ]
 
 
-def _rebuild_input(ctx, task: Task, with_public_url: bool = True) -> TaskInput:
+async def _enhance_for_task(
+    ctx,
+    *,
+    model: ModelConfig,
+    capability: str,
+    prompt: str,
+    has_reference: bool,
+    template_id: str | None,
+) -> tuple[str, str | None, str | None, str | None]:
+    """Return (final_prompt, enhanced_prompt, error, used_template_id)."""
+    if not template_id:
+        return prompt, None, None, None
+    try:
+        template, enhancer = prompt_enhance.resolve_template_and_enhancer(ctx, model.id, template_id)
+        enhanced = await prompt_enhance.enhance(
+            ctx,
+            template=template,
+            enhancer_model=enhancer,
+            prompt=prompt,
+            image_model=model,
+            capability=capability,
+            has_reference=has_reference,
+        )
+        return enhanced, enhanced, None, template.id
+    except Exception as error:  # noqa: BLE001 - fall back to the raw prompt
+        logger.warning("prompt enhancement failed, using raw prompt: %s", error)
+        return prompt, None, str(error), None
+
+
+def _rebuild_input(
+    ctx, task: Task, with_public_url: bool = True, prompt: str | None = None
+) -> TaskInput:
     paired: list[tuple[str, Asset]] = [
         (link.role, link.asset)
         for link in repository.list_task_assets(ctx.db, task.id)
         if link.role != "output"
     ]
     return TaskInput(
-        prompt=str(task.parameters.get("prompt", "")),
+        prompt=prompt if prompt is not None else str(task.parameters.get("prompt", "")),
         parameters=dict(task.parameters),
         assets=_build_asset_inputs(ctx, task.id, paired, with_public_url=with_public_url),
         capability=task.capability,
@@ -212,6 +245,9 @@ async def create_task(
     parent_task_id: str | None = None,
     conversation_id: str | None = None,
     messages: list[dict[str, str]] | None = None,
+    original_prompt: str | None = None,
+    enhance_template_id: str | None = None,
+    prompt_template_id: str | None = None,
 ) -> Task:
     model = repository.get_model(ctx.db, model_id)
     if not model or not model.enabled:
@@ -239,7 +275,21 @@ async def create_task(
     if config is None or not config.configured:
         raise TaskError(f"{provider.provider_type} 服务尚未在 providers.yaml 中配置 API Key。")
 
-    merged_parameters = {**(parameters or {}), "prompt": prompt}
+    final_prompt = prompt
+    enhanced_prompt: str | None = None
+    enhance_error: str | None = None
+    used_template_id = prompt_template_id
+    if enhance_template_id:
+        final_prompt, enhanced_prompt, enhance_error, used_template_id = await _enhance_for_task(
+            ctx,
+            model=model,
+            capability=capability,
+            prompt=prompt,
+            has_reference=bool(asset_map),
+            template_id=enhance_template_id,
+        )
+
+    merged_parameters = {**(parameters or {}), "prompt": final_prompt}
     if mode is not None:
         merged_parameters.setdefault("mode", mode)
 
@@ -277,13 +327,17 @@ async def create_task(
         parent_task_id=parent_task_id,
         result_asset_id=None,
         conversation_id=conversation_id,
+        original_prompt=original_prompt if original_prompt is not None else prompt,
+        prompt_template_id=used_template_id,
+        enhanced_prompt=enhanced_prompt,
+        enhance_error=enhance_error,
     )
     repository.insert_task(ctx.db, task)
     for role, asset in asset_map:
         repository.insert_task_asset(ctx.db, task.id, asset.id, role)
 
     task_input = TaskInput(
-        prompt=prompt,
+        prompt=final_prompt,
         parameters=merged_parameters,
         assets=_build_asset_inputs(ctx, task.id, asset_map, with_public_url=needs_public_url),
         capability=capability,
@@ -567,7 +621,12 @@ async def retry_task(ctx, task_id: str) -> Task:
     needs_public_url = bool(
         definition and task.capability in definition.public_url_capabilities
     )
-    # 清空上一次尝试的产物与外部标识，状态回到 pending 后重新提交。
+    assets = [
+        link for link in repository.list_task_assets(ctx.db, task.id) if link.role != "output"
+    ]
+    # 重试使用原始提示词，不自动增强：增强后的措辞可能触发上游内容审核。
+    raw_prompt = task.original_prompt or str(task.parameters.get("prompt", ""))
+    final_prompt = raw_prompt
     repository.update_task_fields(
         ctx.db,
         task.id,
@@ -578,9 +637,18 @@ async def retry_task(ctx, task_id: str) -> Task:
         external_video_id=None,
         started_at=None,
         completed_at=None,
+        parameters_json=json.dumps(
+            {**task.parameters, "prompt": final_prompt}, ensure_ascii=False
+        ),
+        original_prompt=raw_prompt,
+        prompt_template_id=None,
+        enhanced_prompt=None,
+        enhance_error=None,
     )
     refreshed = repository.get_task(ctx.db, task.id)
-    task_input = _rebuild_input(ctx, refreshed, with_public_url=needs_public_url)
+    task_input = _rebuild_input(
+        ctx, refreshed, with_public_url=needs_public_url, prompt=final_prompt
+    )
     await _dispatch(ctx, refreshed, task_input, model, provider)
     return repository.get_task(ctx.db, task.id)
 

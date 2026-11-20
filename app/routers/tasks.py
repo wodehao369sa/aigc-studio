@@ -26,6 +26,9 @@ class CreateTaskRequest(BaseModel):
     prompt: str = Field(min_length=1)
     parameters: dict[str, Any] = Field(default_factory=dict)
     assets: list[AssetRef] = Field(default_factory=list, max_length=8)
+    originalPrompt: str | None = Field(default=None, max_length=20000)
+    enhanceTemplateId: str | None = Field(default=None, max_length=64)
+    promptTemplateId: str | None = Field(default=None, max_length=64)
 
 
 class BulkDeleteRequest(BaseModel):
@@ -81,6 +84,9 @@ async def create_task(request: Request, body: CreateTaskRequest):
             parameters=body.parameters,
             assets=[item.model_dump() for item in body.assets],
             mode=body.mode,
+            original_prompt=body.originalPrompt,
+            enhance_template_id=body.enhanceTemplateId,
+            prompt_template_id=body.promptTemplateId,
         )
     except tasks_service.TaskError as error:
         raise HTTPException(status_code=400, detail=str(error))

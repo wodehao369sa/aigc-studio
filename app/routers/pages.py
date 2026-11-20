@@ -12,7 +12,14 @@ from fastapi.templating import Jinja2Templates
 from .. import repository
 from ..catalog import CAPABILITIES, CAPABILITY_LABELS, TASK_STATUSES, WORKSPACES
 from ..config import BASE_DIR, MEDIA_LIMIT_BYTES, MEDIA_WARN_BYTES
-from ..serializers import conversation_dict, model_dict, tag_dict, task_detail_dict
+from ..serializers import (
+    binding_dict,
+    conversation_dict,
+    model_dict,
+    tag_dict,
+    task_detail_dict,
+    template_dict,
+)
 from ..services import conversations as conversations_service
 from ..services import settings as settings_service
 from ..services import tasks as tasks_service
@@ -43,12 +50,37 @@ templates.env.filters["json_pretty"] = _json_pretty
 def home(request: Request):
     ctx = request.app.state.ctx
     models = tasks_service.list_models(ctx)
+    model_names = {item.id: item.name for item in repository.list_prompt_templates(ctx.db)}
+    global_config = repository.get_enhance_config(ctx.db)
+    global_binding = None
+    if global_config and global_config["enabled"] and global_config["template_id"]:
+        global_binding = {
+            "templateId": global_config["template_id"],
+            "enhancerModelId": global_config["enhancer_model_id"],
+            "capability": None,
+            "isDefault": False,
+            "sortOrder": 999,
+            "templateName": model_names.get(global_config["template_id"]),
+            "source": "global",
+        }
+    model_bindings = {}
+    for model in models:
+        items = [
+            binding_dict(item, model_names.get(item.template_id))
+            for item in repository.list_bindings(ctx.db, model.id)
+        ]
+        if global_binding and {"text_to_image", "image_to_image"} & set(model.capabilities):
+            if not any(item["templateId"] == global_binding["templateId"] for item in items):
+                items.append(global_binding)
+        if items:
+            model_bindings[model.id] = items
     usage = ctx.media.usage()
     return templates.TemplateResponse(
         request,
         "home.html",
         {
             "models": [model_dict(model) for model in models],
+            "model_bindings": model_bindings,
             "usage": usage,
             "warn_bytes": MEDIA_WARN_BYTES,
             "limit_bytes": MEDIA_LIMIT_BYTES,
@@ -116,6 +148,35 @@ def task_detail_page(task_id: str, request: Request):
 @router.get("/settings")
 def settings_page(request: Request):
     ctx = request.app.state.ctx
+    template_list = [template_dict(item) for item in repository.list_prompt_templates(ctx.db)]
+    template_names = {item["id"]: item["name"] for item in template_list}
+    models = tasks_service.list_models(ctx)
+    image_models = [
+        model
+        for model in models
+        if {"text_to_image", "image_to_image"} & set(model.capabilities)
+    ]
+    text_models = [model for model in models if "text_generation" in model.capabilities]
+    bindings = {
+        model.id: [
+            binding_dict(item, template_names.get(item.template_id))
+            for item in repository.list_bindings(ctx.db, model.id)
+        ]
+        for model in image_models
+    }
+    global_config = repository.get_enhance_config(ctx.db)
+    if global_config and global_config["enabled"] and global_config["template_id"]:
+        global_binding = {
+            "templateId": global_config["template_id"],
+            "enhancerModelId": global_config["enhancer_model_id"],
+            "capability": None,
+            "isDefault": False,
+            "sortOrder": 999,
+            "templateName": template_names.get(global_config["template_id"]),
+            "source": "global",
+        }
+        for model in image_models:
+            bindings[model.id].append(global_binding)
     return templates.TemplateResponse(
         request,
         "settings.html",
@@ -125,6 +186,15 @@ def settings_page(request: Request):
             "presets": settings_service.list_presets(ctx),
             "capability_labels": CAPABILITY_LABELS,
             "capabilities": CAPABILITIES,
+            "prompt_templates": template_list,
+            "image_models": [model_dict(model) for model in image_models],
+            "text_models": [model_dict(model) for model in text_models],
+            "bindings": bindings,
+            "enhance_default": {
+                "enabled": bool(global_config and global_config["enabled"]),
+                "templateId": global_config["template_id"] if global_config else None,
+                "enhancerModelId": global_config["enhancer_model_id"] if global_config else None,
+            },
         },
     )
 

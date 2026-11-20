@@ -16,6 +16,8 @@ from .entities import (
     Asset,
     Conversation,
     ModelConfig,
+    ModelPromptBinding,
+    PromptTemplate,
     Provider,
     Tag,
     Task,
@@ -322,6 +324,10 @@ def _parse_task(row: sqlite3.Row) -> Task:
         conversation_id=row["conversation_id"] if "conversation_id" in row.keys() else None,
         is_favorite=bool(row["is_favorite"]) if "is_favorite" in row.keys() else False,
         favorited_at=row["favorited_at"] if "favorited_at" in row.keys() else None,
+        original_prompt=row["original_prompt"] if "original_prompt" in row.keys() else None,
+        prompt_template_id=row["prompt_template_id"] if "prompt_template_id" in row.keys() else None,
+        enhanced_prompt=row["enhanced_prompt"] if "enhanced_prompt" in row.keys() else None,
+        enhance_error=row["enhance_error"] if "enhance_error" in row.keys() else None,
     )
 
 
@@ -332,7 +338,8 @@ def get_task(db: Database, task_id: str) -> Task | None:
                status, progress, external_task_id, external_video_id, error,
                result_text, created_at, started_at, completed_at,
                parent_task_id, result_asset_id, conversation_id,
-               is_favorite, favorited_at
+               is_favorite, favorited_at,
+               original_prompt, prompt_template_id, enhanced_prompt, enhance_error
         FROM tasks WHERE id = ?
         """,
         (task_id,),
@@ -348,8 +355,9 @@ def insert_task(db: Database, task: Task) -> None:
             status, progress, external_task_id, external_video_id, error,
             result_text, created_at, started_at, completed_at,
             parent_task_id, result_asset_id, conversation_id,
-            is_favorite, favorited_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            is_favorite, favorited_at,
+            original_prompt, prompt_template_id, enhanced_prompt, enhance_error
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             task.id,
@@ -372,6 +380,10 @@ def insert_task(db: Database, task: Task) -> None:
             task.conversation_id,
             int(task.is_favorite),
             task.favorited_at,
+            task.original_prompt,
+            task.prompt_template_id,
+            task.enhanced_prompt,
+            task.enhance_error,
         ),
     )
 
@@ -798,4 +810,153 @@ def invalidate_task_tokens(db: Database, task_id: str, now: int) -> None:
     db.execute(
         "UPDATE reference_tokens SET invalidated_at = ? WHERE task_id = ? AND invalidated_at IS NULL",
         (now, task_id),
+    )
+
+
+# --- prompt enhancement ------------------------------------------------------
+
+
+def _parse_prompt_template(row: sqlite3.Row) -> PromptTemplate:
+    return PromptTemplate(
+        id=row["id"],
+        name=row["name"],
+        content=row["content"],
+        created_at=row["created_at"],
+        updated_at=row["updated_at"],
+        as_system=bool(row["as_system"]) if "as_system" in row.keys() else False,
+    )
+
+
+def create_prompt_template(db: Database, template: PromptTemplate) -> None:
+    db.execute(
+        """
+        INSERT INTO prompt_templates (id, name, content, as_system, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (
+            template.id,
+            template.name,
+            template.content,
+            int(template.as_system),
+            template.created_at,
+            template.updated_at,
+        ),
+    )
+
+
+def list_prompt_templates(db: Database) -> list[PromptTemplate]:
+    rows = db.query(
+        "SELECT id, name, content, as_system, created_at, updated_at FROM prompt_templates ORDER BY name"
+    )
+    return [_parse_prompt_template(row) for row in rows]
+
+
+def get_prompt_template(db: Database, template_id: str) -> PromptTemplate | None:
+    row = db.query_one(
+        "SELECT id, name, content, as_system, created_at, updated_at FROM prompt_templates WHERE id = ?",
+        (template_id,),
+    )
+    return _parse_prompt_template(row) if row else None
+
+
+def update_prompt_template(db: Database, template: PromptTemplate) -> bool:
+    cursor = db.execute(
+        "UPDATE prompt_templates SET name = ?, content = ?, as_system = ?, updated_at = ? WHERE id = ?",
+        (template.name, template.content, int(template.as_system), template.updated_at, template.id),
+    )
+    return cursor.rowcount > 0
+
+
+def delete_prompt_template(db: Database, template_id: str) -> None:
+    db.execute("DELETE FROM model_prompt_templates WHERE template_id = ?", (template_id,))
+    db.execute("DELETE FROM prompt_templates WHERE id = ?", (template_id,))
+
+
+def _parse_binding(row: sqlite3.Row) -> ModelPromptBinding:
+    return ModelPromptBinding(
+        model_id=row["model_id"],
+        template_id=row["template_id"],
+        enhancer_model_id=row["enhancer_model_id"],
+        is_default=bool(row["is_default"]),
+        sort_order=row["sort_order"],
+        capability=row["capability"] if "capability" in row.keys() else None,
+    )
+
+
+def list_bindings(db: Database, model_id: str) -> list[ModelPromptBinding]:
+    rows = db.query(
+        """
+        SELECT model_id, template_id, enhancer_model_id, capability, is_default, sort_order
+        FROM model_prompt_templates WHERE model_id = ? ORDER BY sort_order, template_id
+        """,
+        (model_id,),
+    )
+    return [_parse_binding(row) for row in rows]
+
+
+def get_default_binding(
+    db: Database, model_id: str, capability: str | None = None
+) -> ModelPromptBinding | None:
+    rows = list_bindings(db, model_id)
+    if capability:
+        for row in rows:
+            if row.is_default and row.capability == capability:
+                return row
+    for row in rows:
+        if row.is_default:
+            return row
+    return rows[0] if rows else None
+
+
+def set_bindings(db: Database, model_id: str, bindings: list[ModelPromptBinding]) -> None:
+    db.execute("DELETE FROM model_prompt_templates WHERE model_id = ?", (model_id,))
+    for binding in bindings:
+        db.execute(
+            """
+            INSERT INTO model_prompt_templates
+              (model_id, template_id, enhancer_model_id, capability, is_default, sort_order)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                model_id,
+                binding.template_id,
+                binding.enhancer_model_id,
+                binding.capability,
+                int(binding.is_default),
+                binding.sort_order,
+            ),
+        )
+
+
+# --- global enhancement default ---------------------------------------------
+
+
+def get_enhance_config(db: Database) -> dict | None:
+    row = db.query_one(
+        """
+        SELECT id, enabled, template_id, enhancer_model_id, updated_at
+        FROM prompt_enhance_config WHERE id = 'default'
+        """
+    )
+    return dict(row) if row else None
+
+
+def set_enhance_config(
+    db: Database,
+    enabled: bool,
+    template_id: str | None,
+    enhancer_model_id: str | None,
+    updated_at: int,
+) -> None:
+    db.execute(
+        """
+        INSERT INTO prompt_enhance_config (id, enabled, template_id, enhancer_model_id, updated_at)
+        VALUES ('default', ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            enabled = excluded.enabled,
+            template_id = excluded.template_id,
+            enhancer_model_id = excluded.enhancer_model_id,
+            updated_at = excluded.updated_at
+        """,
+        (int(enabled), template_id, enhancer_model_id, updated_at),
     )

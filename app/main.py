@@ -24,6 +24,7 @@ from .providers import discover_registry
 from .routers import register_routers
 from .routers.pages import templates
 from .services.media import MediaService
+from .services.prompt_enhance import ensure_defaults
 from .services.scheduler import Scheduler
 from .services.settings import sync_provider_rows
 
@@ -63,6 +64,10 @@ async def lifespan(app: FastAPI):
         public_base_url=PUBLIC_BASE_URL,
     )
     sync_provider_rows(ctx)
+    try:
+        ensure_defaults(ctx)
+    except Exception:  # noqa: BLE001 - seeding must never block startup
+        logger.exception("failed to seed prompt enhancement defaults")
 
     app.state.ctx = ctx
     asset_version = compute_asset_version()

@@ -68,7 +68,11 @@ CREATE TABLE IF NOT EXISTS tasks (
     result_asset_id TEXT,
     conversation_id TEXT,
     is_favorite INTEGER NOT NULL DEFAULT 0,
-    favorited_at INTEGER
+    favorited_at INTEGER,
+    original_prompt TEXT,
+    prompt_template_id TEXT,
+    enhanced_prompt TEXT,
+    enhance_error TEXT
 );
 
 CREATE TABLE IF NOT EXISTS tags (
@@ -81,6 +85,33 @@ CREATE TABLE IF NOT EXISTS task_tags (
     task_id TEXT NOT NULL,
     tag_id TEXT NOT NULL,
     PRIMARY KEY (task_id, tag_id)
+);
+
+CREATE TABLE IF NOT EXISTS prompt_templates (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    content TEXT NOT NULL,
+    as_system INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS model_prompt_templates (
+    model_id TEXT NOT NULL,
+    template_id TEXT NOT NULL,
+    enhancer_model_id TEXT NOT NULL,
+    capability TEXT,
+    is_default INTEGER NOT NULL DEFAULT 0,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (model_id, template_id)
+);
+
+CREATE TABLE IF NOT EXISTS prompt_enhance_config (
+    id TEXT PRIMARY KEY,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    template_id TEXT,
+    enhancer_model_id TEXT,
+    updated_at INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS conversations (
@@ -115,6 +146,7 @@ CREATE INDEX IF NOT EXISTS idx_tasks_status_created_at ON tasks(status, created_
 CREATE INDEX IF NOT EXISTS idx_tasks_conversation ON tasks(conversation_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_task_tags_tag ON task_tags(tag_id);
 CREATE INDEX IF NOT EXISTS idx_task_tags_task ON task_tags(task_id);
+CREATE INDEX IF NOT EXISTS idx_model_prompt_templates_model ON model_prompt_templates(model_id, sort_order);
 CREATE INDEX IF NOT EXISTS idx_task_assets_task ON task_assets(task_id);
 CREATE INDEX IF NOT EXISTS idx_task_assets_asset ON task_assets(asset_id);
 CREATE INDEX IF NOT EXISTS idx_reference_tokens_task ON reference_tokens(task_id);
@@ -174,6 +206,29 @@ def _migrate(connection: sqlite3.Connection) -> None:
         connection.commit()
     if columns and "favorited_at" not in columns:
         connection.execute("ALTER TABLE tasks ADD COLUMN favorited_at INTEGER")
+        connection.commit()
+    for column, ddl in (
+        ("original_prompt", "ALTER TABLE tasks ADD COLUMN original_prompt TEXT"),
+        ("prompt_template_id", "ALTER TABLE tasks ADD COLUMN prompt_template_id TEXT"),
+        ("enhanced_prompt", "ALTER TABLE tasks ADD COLUMN enhanced_prompt TEXT"),
+        ("enhance_error", "ALTER TABLE tasks ADD COLUMN enhance_error TEXT"),
+    ):
+        if columns and column not in columns:
+            connection.execute(ddl)
+            connection.commit()
+    template_columns = {
+        row["name"]
+        for row in connection.execute("PRAGMA table_info(prompt_templates)").fetchall()
+    }
+    if template_columns and "as_system" not in template_columns:
+        connection.execute("ALTER TABLE prompt_templates ADD COLUMN as_system INTEGER NOT NULL DEFAULT 0")
+        connection.commit()
+    binding_columns = {
+        row["name"]
+        for row in connection.execute("PRAGMA table_info(model_prompt_templates)").fetchall()
+    }
+    if binding_columns and "capability" not in binding_columns:
+        connection.execute("ALTER TABLE model_prompt_templates ADD COLUMN capability TEXT")
         connection.commit()
 
 

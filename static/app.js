@@ -8,6 +8,7 @@ const CAPABILITY_LABELS = {
   image_to_video: "图生视频",
   keyframe_video: "首尾帧视频",
   reference_video: "图片参考视频",
+  text_to_speech: "文本转语音",
 };
 
 function esc(value) {
@@ -56,6 +57,11 @@ function initCreateForm() {
   let capability = workspaces[0].modes[0];
   let modelId = "";
   const selectedFiles = {};
+  const modelBindings = JSON.parse(root.dataset.modelBindings || "{}");
+  let enhancementEnabled = true;
+  let selectedTemplateId = "";
+  let enhancementApplied = false;
+  let rawPrompt = "";
 
   const modelsFor = (cap) => models.filter((model) => model.capabilities.includes(cap));
   const selectedModel = () => {
@@ -154,6 +160,42 @@ function initCreateForm() {
     const emptyHint = !model
       ? '<p class="wide hint">暂无可用模型。<a href="/settings">前往服务与模型</a></p>'
       : "";
+    const allBindings = (model && modelBindings[model.id]) || [];
+    const isImageCapability =
+      capability === "text_to_image" || capability === "image_to_image";
+    const bindings = !isImageCapability
+      ? []
+      : allBindings.filter((item) => !item.capability || item.capability === capability);
+    if (bindings.length) {
+      const fallback =
+        bindings.find((item) => item.isDefault && item.capability === capability) ||
+        bindings.find((item) => item.capability === capability) ||
+        bindings.find((item) => item.isDefault) ||
+        bindings[0];
+      enhancementEnabled = false;
+      selectedTemplateId = fallback.templateId;
+      enhancementApplied = false;
+      rawPrompt = "";
+    }
+    const enhanceBox = bindings.length ? `
+      <div class="enhance-box wide">
+        <div class="enhance-row">
+          <button type="button" id="enhance-btn" class="enhance-button">✨ 提示词增强</button>
+          <select id="enhance-template">
+            ${bindings
+              .map(
+                (item) =>
+                  `<option value="${esc(item.templateId)}" data-enhancer="${esc(item.enhancerModelId)}"` +
+                  `${item.templateId === selectedTemplateId ? " selected" : ""}>` +
+                  `${esc(item.templateName || item.templateId)}${item.isDefault ? "（默认）" : ""}</option>`,
+              )
+              .join("")}
+          </select>
+          <label class="inline-check"><input type="checkbox" id="enhance-toggle" />启用</label>
+        </div>
+        <p class="hint">默认关闭。点「提示词增强」可预览并编辑后再生成；勾选「启用」后，提交时自动增强。</p>
+        <p class="error" id="enhance-message"></p>
+      </div>` : "";
 
     root.innerHTML = `
       <form id="create" class="studio">
@@ -168,6 +210,7 @@ function initCreateForm() {
           <label class="wide">${capability === "text_to_speech" ? "要朗读的文本" : "提示词"}
             <textarea name="prompt" required placeholder="${capability === "text_to_speech" ? "输入需要合成的文本" : "描述主体、动作、环境、镜头和风格"}"></textarea>
           </label>
+          ${enhanceBox}
           ${parameterFields}
           ${fileFields}
           ${emptyHint}
@@ -228,6 +271,61 @@ function initCreateForm() {
     form.addEventListener("submit", submit);
     bindFileFields();
     bindVoicePickers();
+    const enhanceToggle = root.querySelector("#enhance-toggle");
+    if (enhanceToggle) {
+      enhanceToggle.addEventListener("change", () => {
+        enhancementEnabled = enhanceToggle.checked;
+      });
+    }
+    const previewButton = root.querySelector("#enhance-btn");
+    if (previewButton) {
+      previewButton.addEventListener("click", () => void previewEnhance());
+    }
+  }
+
+  async function previewEnhance() {
+    const model = selectedModel();
+    const textarea = root.querySelector('[name="prompt"]');
+    const prompt = textarea ? textarea.value.trim() : "";
+    if (!prompt) {
+      showMessage("请先输入原始提示词。");
+      return;
+    }
+    const select = root.querySelector("#enhance-template");
+    const option = select && select.selectedOptions ? select.selectedOptions[0] : null;
+    const templateId = select ? select.value : selectedTemplateId;
+    const enhancerModelId = option ? option.dataset.enhancer : "";
+    if (!templateId || !enhancerModelId) {
+      showMessage("该模型未配置增强模板。");
+      return;
+    }
+    const hasReference = fileRoles(capability).some((role) => {
+      const input = root.querySelector(`[name="${role}"]`);
+      return input && input.files && input.files[0];
+    });
+    const button = root.querySelector("#enhance-btn");
+    button.disabled = true;
+    showMessage("");
+    try {
+      const data = await api("/api/prompt-enhance/preview", {
+        method: "POST",
+        body: JSON.stringify({
+          templateId,
+          enhancerModelId,
+          prompt,
+          modelId: model.id,
+          capability,
+          hasReference,
+        }),
+      });
+      rawPrompt = prompt;
+      textarea.value = data.enhancedPrompt;
+      enhancementApplied = true;
+    } catch (error) {
+      showMessage(error.message || "增强失败");
+    } finally {
+      button.disabled = false;
+    }
   }
 
   async function pickVoices(button) {
@@ -340,9 +438,19 @@ function initCreateForm() {
         }
       }
       const prompt = form.querySelector('[name="prompt"]').value;
+      const payload = { modelId: model.id, capability, prompt, parameters, assets };
+      const enhanceSelect = root.querySelector("#enhance-template");
+      if (enhancementEnabled && enhanceSelect && enhanceSelect.value) {
+        payload.originalPrompt = rawPrompt || prompt;
+        if (enhancementApplied) {
+          payload.promptTemplateId = enhanceSelect.value;
+        } else {
+          payload.enhanceTemplateId = enhanceSelect.value;
+        }
+      }
       const task = await api("/api/tasks", {
         method: "POST",
-        body: JSON.stringify({ modelId: model.id, capability, prompt, parameters, assets }),
+        body: JSON.stringify(payload),
       });
       window.location.assign(`/tasks/${task.id}`);
     } catch (error) {
@@ -606,19 +714,25 @@ function initSettings() {
   const presets = data.presets;
   const connections = document.getElementById("connections");
   const modelsSection = document.getElementById("models");
+  const enhanceSection = document.getElementById("enhance");
   const tabConnections = document.getElementById("tab-connections");
   const tabModels = document.getElementById("tab-models");
+  const tabEnhance = document.getElementById("tab-enhance");
   const form = document.getElementById("model-form");
 
   function switchTab(name) {
     const showConnections = name === "connections";
+    const showModels = name === "models";
     connections.hidden = !showConnections;
-    modelsSection.hidden = showConnections;
+    modelsSection.hidden = !showModels;
+    if (enhanceSection) enhanceSection.hidden = name !== "enhance";
     tabConnections.setAttribute("aria-pressed", String(showConnections));
-    tabModels.setAttribute("aria-pressed", String(!showConnections));
+    tabModels.setAttribute("aria-pressed", String(showModels));
+    if (tabEnhance) tabEnhance.setAttribute("aria-pressed", String(name === "enhance"));
   }
   tabConnections.addEventListener("click", () => switchTab("connections"));
   tabModels.addEventListener("click", () => switchTab("models"));
+  if (tabEnhance) tabEnhance.addEventListener("click", () => switchTab("enhance"));
 
   document.getElementById("reload-providers").addEventListener("click", async () => {
     if (!confirm("重新扫描 app/providers 并更新服务列表？")) return;
@@ -660,6 +774,163 @@ function initSettings() {
     const node = document.getElementById("settings-message");
     node.textContent = message || "";
   }
+
+  // --- prompt enhancement ------------------------------------------------------
+
+  const enhanceMessage = document.getElementById("enhance-message");
+  const templateForm = document.getElementById("template-form");
+  const templateList = document.getElementById("template-list");
+  const templateName = document.getElementById("template-name");
+  const templateContent = document.getElementById("template-content");
+
+  function showEnhanceMessage(message) {
+    if (enhanceMessage) enhanceMessage.textContent = message || "";
+  }
+
+  if (templateForm) {
+    document.getElementById("add-template").addEventListener("click", () => {
+      templateForm.hidden = false;
+      templateForm.dataset.editing = "";
+      document.getElementById("template-form-title").textContent = "新增模板";
+      templateName.value = "";
+      templateContent.value = "";
+    });
+    document.getElementById("cancel-template").addEventListener("click", () => {
+      templateForm.hidden = true;
+    });
+    const templateAsSystem = document.getElementById("template-as-system");
+    const templateVarsHint = document.getElementById("template-vars-hint");
+    function updateTemplateHint() {
+      if (!templateVarsHint || !templateAsSystem) return;
+      templateVarsHint.textContent = templateAsSystem.checked
+        ? "作为系统消息；你的提示词会作为 user 消息自动附加"
+        : "可用 {{prompt}} / {{model}} / {{capability}} / {{has_reference}}";
+    }
+    if (templateAsSystem) {
+      templateAsSystem.addEventListener("change", updateTemplateHint);
+      updateTemplateHint();
+    }
+    templateForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const payload = {
+        name: templateName.value,
+        content: templateContent.value,
+        asSystem: document.getElementById("template-as-system").checked,
+      };
+      try {
+        if (templateForm.dataset.editing) {
+          await api(`/api/settings/prompt-templates/${templateForm.dataset.editing}`, {
+            method: "PATCH",
+            body: JSON.stringify(payload),
+          });
+        } else {
+          await api("/api/settings/prompt-templates", {
+            method: "POST",
+            body: JSON.stringify(payload),
+          });
+        }
+        location.reload();
+      } catch (error) {
+        showEnhanceMessage(error.message || "保存失败");
+      }
+    });
+    templateList.querySelectorAll(".edit-template").forEach((button) => {
+      button.addEventListener("click", () => {
+        const template = data.promptTemplates.find((item) => item.id === button.dataset.id);
+        if (!template) return;
+        templateForm.hidden = false;
+        templateForm.dataset.editing = template.id;
+        document.getElementById("template-form-title").textContent = "编辑模板";
+        templateName.value = template.name;
+        templateContent.value = template.content;
+        document.getElementById("template-as-system").checked = Boolean(template.asSystem);
+      });
+    });
+    templateList.querySelectorAll(".delete-template").forEach((button) => {
+      button.addEventListener("click", async () => {
+        if (!confirm("删除该模板？")) return;
+        try {
+          await api(`/api/settings/prompt-templates/${button.dataset.id}`, { method: "DELETE" });
+          location.reload();
+        } catch (error) {
+          showEnhanceMessage(error.message || "删除失败");
+        }
+      });
+    });
+  }
+
+  const globalEnabled = document.getElementById("global-enabled");
+  if (globalEnabled) {
+    document.getElementById("global-save").addEventListener("click", async () => {
+      try {
+        await api("/api/settings/prompt-enhance-default", {
+          method: "PUT",
+          body: JSON.stringify({
+            enabled: globalEnabled.checked,
+            templateId: document.getElementById("global-template").value,
+            enhancerModelId: document.getElementById("global-enhancer").value,
+          }),
+        });
+        location.reload();
+      } catch (error) {
+        showEnhanceMessage(error.message || "保存失败");
+      }
+    });
+  }
+
+  function bindingRowHTML(modelId) {    const templateOptions = data.promptTemplates
+      .map((item) => `<option value="${item.id}">${esc(item.name)}</option>`)
+      .join("");
+    const enhancerOptions = data.textModels
+      .map((item) => `<option value="${item.id}">${esc(item.name)}</option>`)
+      .join("");
+    return (
+      `<div class="binding-row"><select class="binding-template">${templateOptions}</select>` +
+      `<select class="binding-enhancer">${enhancerOptions}</select>` +
+      `<select class="binding-capability"><option value="">全部能力</option>` +
+      `<option value="text_to_image">文生图</option><option value="image_to_image">图生图</option></select>` +
+      `<label class="inline-check"><input type="radio" name="default-${modelId}" class="binding-default" />默认</label>` +
+      `<button type="button" class="danger-button binding-remove">删除</button></div>`
+    );
+  }
+
+  document.querySelectorAll(".binding-add").forEach((button) => {
+    button.addEventListener("click", () => {
+      const modelId = button.dataset.model;
+      const container = document.querySelector(`.binding-rows[data-model="${modelId}"]`);
+      if (container) container.insertAdjacentHTML("beforeend", bindingRowHTML(modelId));
+    });
+  });
+  const bindingList = document.getElementById("binding-list");
+  if (bindingList) {
+    bindingList.addEventListener("click", (event) => {
+      if (event.target.classList.contains("binding-remove")) {
+        event.target.closest(".binding-row").remove();
+      }
+    });
+  }
+  document.querySelectorAll(".binding-save").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const modelId = button.dataset.model;
+      const rows = document.querySelectorAll(`.binding-rows[data-model="${modelId}"] .binding-row`);
+      const bindings = Array.from(rows).map((row, index) => ({
+        templateId: row.querySelector(".binding-template").value,
+        enhancerModelId: row.querySelector(".binding-enhancer").value,
+        capability: row.querySelector(".binding-capability").value,
+        isDefault: row.querySelector(".binding-default").checked,
+        sortOrder: index,
+      }));
+      try {
+        await api(`/api/settings/models/${modelId}/prompt-templates`, {
+          method: "PUT",
+          body: JSON.stringify({ bindings }),
+        });
+        location.reload();
+      } catch (error) {
+        showEnhanceMessage(error.message || "保存失败");
+      }
+    });
+  });
 
   function renderCapabilityCheckboxes(providerId, selected) {
     const container = document.getElementById("model-capabilities");

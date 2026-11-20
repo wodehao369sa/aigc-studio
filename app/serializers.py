@@ -4,7 +4,19 @@ from __future__ import annotations
 
 from typing import Any
 
-from .entities import Asset, Conversation, ModelConfig, Provider, Tag, Task, TaskDetail, TaskListResult, TaskSummary
+from .entities import (
+    Asset,
+    Conversation,
+    ModelConfig,
+    ModelPromptBinding,
+    PromptTemplate,
+    Provider,
+    Tag,
+    Task,
+    TaskDetail,
+    TaskListResult,
+    TaskSummary,
+)
 
 
 def asset_dict(asset: Asset) -> dict[str, Any]:
@@ -71,6 +83,10 @@ def task_dict(task: Task) -> dict[str, Any]:
         "conversationId": task.conversation_id,
         "isFavorite": task.is_favorite,
         "favoritedAt": task.favorited_at,
+        "originalPrompt": task.original_prompt,
+        "promptTemplateId": task.prompt_template_id,
+        "enhancedPrompt": task.enhanced_prompt,
+        "enhanceError": task.enhance_error,
     }
 
 
@@ -118,6 +134,28 @@ def tag_dict(tag: Tag) -> dict[str, Any]:
         "name": tag.name,
         "createdAt": tag.created_at,
         "count": tag.count,
+    }
+
+
+def template_dict(template: PromptTemplate) -> dict[str, Any]:
+    return {
+        "id": template.id,
+        "name": template.name,
+        "content": template.content,
+        "asSystem": template.as_system,
+        "createdAt": template.created_at,
+        "updatedAt": template.updated_at,
+    }
+
+
+def binding_dict(binding: ModelPromptBinding, template_name: str | None = None) -> dict[str, Any]:
+    return {
+        "templateId": binding.template_id,
+        "enhancerModelId": binding.enhancer_model_id,
+        "isDefault": binding.is_default,
+        "sortOrder": binding.sort_order,
+        "templateName": template_name,
+        "capability": binding.capability,
     }
 
 

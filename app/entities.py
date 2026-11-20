@@ -69,6 +69,30 @@ class Task:
     conversation_id: str | None = None
     is_favorite: bool = False
     favorited_at: int | None = None
+    original_prompt: str | None = None
+    prompt_template_id: str | None = None
+    enhanced_prompt: str | None = None
+    enhance_error: str | None = None
+
+
+@dataclass
+class PromptTemplate:
+    id: str
+    name: str
+    content: str
+    created_at: int
+    updated_at: int
+    as_system: bool = False
+
+
+@dataclass
+class ModelPromptBinding:
+    model_id: str
+    template_id: str
+    enhancer_model_id: str
+    is_default: bool
+    sort_order: int
+    capability: str | None = None
 
 
 @dataclass

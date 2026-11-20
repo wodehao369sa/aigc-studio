@@ -61,6 +61,13 @@ SQLite 表：`providers`、`models`、`assets`、`tasks`、`task_assets`、
 收到完整 `messages` 历史（仅成功轮次）。图生图/文生图不需要公网 URL，视频
 参考图仍需要。
 
+提示词增强：`prompt_templates` 存模板（`as_system` 决定内容作为 system 还是
+user 消息），`model_prompt_templates` 把模板绑定到图片模型并指定增强文本模型、
+能力（`capability`）与默认项；`prompt_enhance_config` 是全局默认，未单独绑定的
+图片模型自动使用。任务保存 `original_prompt` / `enhanced_prompt` /
+`prompt_template_id`。`app/prompt_presets/` 内置 Qwen-Image-2.1 官方改写提示词
+和通用模板，启动时由 `ensure_defaults` 注册并绑定。
+
 ## 开发约定
 
 1. **输入校验**：API 用 pydantic 校验请求体、查询参数和文件元数据；上传校验
