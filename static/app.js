@@ -75,10 +75,18 @@ function initCreateForm() {
     reference_image: "参考图片",
   }[role] || role);
 
-  function fieldHTML(field) {
+  function fieldHTML(field, model) {
     const label = esc(field.label);
     const key = esc(field.key);
     const defaultValue = esc(field.default ?? "");
+    if (field.key === "voice_id") {
+      return (
+        `<label>${label}<span class="voice-field">` +
+        `<input type="text" name="${key}" required placeholder="voc_..." />` +
+        `<button type="button" class="pick-voice" data-provider="${esc(model.providerId)}">选择音色</button>` +
+        `</span></label><div class="voice-list" data-key="${key}" hidden></div>`
+      );
+    }
     if (field.type === "select") {
       const options = (field.options || [])
         .map((option) => `<option value="${esc(option)}"${option === field.default ? " selected" : ""}>${esc(option)}</option>`)
@@ -128,7 +136,9 @@ function initCreateForm() {
           })
           .join("")
       : "<option value=\"\">暂无模型</option>";
-    const parameterFields = model ? model.parameterSchema.map(fieldHTML).join("") : "";
+    const parameterFields = model
+      ? model.parameterSchema.map((field) => fieldHTML(field, model)).join("")
+      : "";
     const fileFields = roles
       .map(
         (role) =>
@@ -217,6 +227,50 @@ function initCreateForm() {
     const form = root.querySelector("#create");
     form.addEventListener("submit", submit);
     bindFileFields();
+    bindVoicePickers();
+  }
+
+  async function pickVoices(button) {
+    const provider = button.dataset.provider;
+    const list = root.querySelector(".voice-list[data-key='voice_id']");
+    if (!list) return;
+    if (!list.hidden) {
+      list.hidden = true;
+      return;
+    }
+    list.innerHTML = '<p class="hint">加载音色中…</p>';
+    list.hidden = false;
+    try {
+      const data = await api(`/api/voices?provider=${encodeURIComponent(provider)}&pageSize=50`);
+      if (!data.voices.length) {
+        list.innerHTML = '<p class="hint">没有可用音色。</p>';
+        return;
+      }
+      list.innerHTML = data.voices
+        .map(
+          (voice) =>
+            `<button type="button" class="voice-row" data-id="${esc(voice.voiceId)}">` +
+            `<strong>${esc(voice.name)}</strong>` +
+            `<small>${esc([voice.languageCode, voice.gender, voice.accent].filter(Boolean).join(" · "))}</small>` +
+            `</button>`,
+        )
+        .join("");
+      list.querySelectorAll(".voice-row").forEach((row) => {
+        row.addEventListener("click", () => {
+          const input = root.querySelector('[name="voice_id"]');
+          if (input) input.value = row.dataset.id;
+          list.hidden = true;
+        });
+      });
+    } catch (error) {
+      list.innerHTML = `<p class="error">${esc(error.message || "加载失败")}</p>`;
+    }
+  }
+
+  function bindVoicePickers() {
+    root.querySelectorAll(".pick-voice").forEach((button) => {
+      button.addEventListener("click", () => void pickVoices(button));
+    });
   }
 
   function bindFileFields() {

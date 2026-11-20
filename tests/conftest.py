@@ -32,6 +32,14 @@ os.environ["POLL_INTERVAL_SECONDS"] = "3600"
     "  - type: modelscope\n"
     "    name: ModelScope\n"
     "    baseUrl: https://api-inference.modelscope.cn\n"
+    "    apiKey: test-key\n"
+    "  - type: fish_audio\n"
+    "    name: Fish Audio\n"
+    "    baseUrl: https://api.fish.audio/v1\n"
+    "    apiKey: test-key\n"
+    "  - type: breeze\n"
+    "    name: Breeze\n"
+    "    baseUrl: https://api.breeze.blue/v1\n"
     "    apiKey: test-key\n",
     encoding="utf-8",
 )

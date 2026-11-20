@@ -73,7 +73,13 @@ def test_model_capability_validation(client):
 
 def test_provider_reload(client):
     providers = client.get("/api/settings/providers").json()
-    assert [item["id"] for item in providers] == ["agnes", "modelscope", "xiaomi_mimo"]
+    assert [item["id"] for item in providers] == [
+        "agnes",
+        "breeze",
+        "fish_audio",
+        "modelscope",
+        "xiaomi_mimo",
+    ]
     assert all(item["configured"] for item in providers)
     reloaded = client.post("/api/settings/providers/reload")
     assert reloaded.status_code == 200

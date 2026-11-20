@@ -44,7 +44,7 @@ class FakeAsyncClient:
     async def __aexit__(self, *args):
         return False
 
-    async def post(self, url, json=None, headers=None):
+    async def post(self, url, json=None, headers=None, params=None):
         handler = self.routes.get(("POST", url))
         if handler is None:
             raise AssertionError(f"unexpected POST {url}")

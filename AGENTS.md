@@ -9,8 +9,10 @@ Nginx Basic Auth，面向单用户、2C2G 服务器。不要引入 PostgreSQL、
 
 第一版接入 Agnes AI 三个模型（`agnes-3.0-flash` 文本、`agnes-image-2.5-flash`
 图片、`agnes-video-2.5-flash` 视频）、小米 MiMo 两个 TTS 模型
-（`mimo-v2.5-tts`、`mimo-v2.5-tts-voicedesign`），以及 ModelScope API-Inference
-的 4 个图片模型（Qwen-Image-2.1[-Turbo]、MOSS-Image-SFT、Z-Image-Turbo）。
+（`mimo-v2.5-tts`、`mimo-v2.5-tts-voicedesign`）、Fish Audio `s2.1-pro-free`、
+Breeze `breeze-tts-2` / `breeze-tts-2-multilingual`，以及 ModelScope
+API-Inference 的 4 个图片模型（Qwen-Image-2.1[-Turbo]、MOSS-Image-SFT、
+Z-Image-Turbo）。
 
 ## 技术栈与运行
 

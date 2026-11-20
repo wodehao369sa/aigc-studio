@@ -11,3 +11,11 @@ providers:
     name: ModelScope
     baseUrl: https://api-inference.modelscope.cn
     apiKey: REPLACE_WITH_MODELSCOPE_ACCESS_TOKEN
+  - type: fish_audio
+    name: Fish Audio
+    baseUrl: https://api.fish.audio/v1
+    apiKey: REPLACE_WITH_FISH_AUDIO_API_KEY
+  - type: breeze
+    name: Breeze
+    baseUrl: https://api.breeze.blue/v1
+    apiKey: REPLACE_WITH_BREEZE_API_KEY

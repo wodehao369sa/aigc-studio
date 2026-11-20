@@ -36,6 +36,27 @@ ModelScope 使用异步任务：`POST /v1/images/generations`（`X-ModelScope-As
 → 轮询 `GET /v1/tasks/{id}`（`X-ModelScope-Task-Type: image_generation`），本地参考图以
 Base64 Data URI 通过 `image_url` 提交。
 
+**Fish Audio（语音合成）**
+
+| 模型 | 能力 | 说明 |
+| --- | --- | --- |
+| `s2.1-pro-free` | 文本转语音 | S2.1 Pro 免费模型，83 种语言，支持多说话人对话 |
+
+Fish Audio 使用 `POST /v1/tts`（`Authorization: Bearer` + `model` 头），同步返回音频，
+可选 `format`（mp3/wav/opus/pcm）、`reference_id`（音色）、`seed`、`latency`。
+
+**Breeze（语音合成）**
+
+| 模型 | 能力 | 说明 |
+| --- | --- | --- |
+| `breeze-tts-2` | 文本转语音 | 中文/英文，可附带表演指令与声音设置 |
+| `breeze-tts-2-multilingual` | 文本转语音 | 51 种语言、34 种音频动作标签 |
+
+Breeze 使用 `POST /v1/text-to-speech/{voice_id}`（`xi-api-key` 认证），同步返回音频。
+请求参数：`voice_id`（必填）、`language_code`、`instructions`、`output_format`、
+`voice_settings`（`guidance_scale` / `speed` / `volume`）。创作页可点击「选择音色」
+拉取账号可用音色（`GET /api/voices?provider=breeze`，底层 `GET /v1/voices`）。
+
 ## 技术栈
 
 - Python 3.11+、FastAPI、Uvicorn
@@ -70,6 +91,8 @@ app/providers/
     models.py        # 三个模型的预设参数
   xiaomi_mimo/       # 小米 MiMo TTS（结构相同）
   modelscope/        # ModelScope API-Inference（异步图片任务）
+  fish_audio/        # Fish Audio TTS
+  breeze/            # Breeze TTS
 ```
 
 新增服务商只需复制 `agnes/` 目录、改名并实现 `definition.py`，然后调用
