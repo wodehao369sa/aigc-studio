@@ -51,7 +51,7 @@
       <div class="catalog-row" data-id="{{ model.id }}">
         <div>
           <strong>{{ model.name }}</strong> · {{ "已启用" if model.enabled else "已停用" }}<br />
-          <code>{{ model.providerId }} / {{ model.externalModelId }}</code><br />
+          <code>{{ provider_names[model.providerId] or model.providerId }} / {{ model.externalModelId }}</code><br />
           <small>{{ model.capabilities | map("caplabel") | join("、") }}</small>
         </div>
         <div class="actions">

@@ -27,7 +27,11 @@ class FakeResponse:
 
     def raise_for_status(self):
         if not self.is_success:
-            raise httpx.HTTPStatusError("error", request=None, response=None)  # type: ignore[arg-type]
+            raise httpx.HTTPStatusError(
+                "error",
+                request=httpx.Request("GET", "http://test"),
+                response=httpx.Response(self.status_code),
+            )
 
 
 class FakeAsyncClient:

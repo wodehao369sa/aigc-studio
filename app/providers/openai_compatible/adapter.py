@@ -66,12 +66,14 @@ class OpenAICompatibleAdapter(ProviderAdapter):
 
         data = await self._post_json(runtime, "chat/completions", payload)
         choices = data.get("choices") or []
-        content = None
-        if choices:
-            content = (choices[0].get("message") or {}).get("content")
-        if content is None:
+        message = (choices[0].get("message") or {}) if choices else {}
+        content = message.get("content")
+        if not content:
+            # 推理模型在 max_tokens 被思考占满时 content 可能为空，回退到 reasoning_content。
+            content = message.get("reasoning_content")
+        if not content:
             raise ProviderError("OpenAI 兼容接口未返回内容。")
-        return ProviderTaskRef(result_text=str(content))
+        return ProviderTaskRef(result_text=str(content).strip())
 
     # --- images ---------------------------------------------------------------
 

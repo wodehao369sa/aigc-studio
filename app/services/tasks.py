@@ -19,7 +19,7 @@ import httpx
 
 from .. import repository
 from ..config import MAX_RESULT_BYTES, PROVIDER_TIMEOUT_SECONDS
-from ..entities import Asset, ModelConfig, Provider, Task, TaskDetail, TaskListResult
+from ..entities import Asset, ModelConfig, Provider, Tag, Task, TaskDetail, TaskListResult
 from ..providers.base import (
     AssetInput,
     ProviderRuntime,
@@ -406,7 +406,18 @@ async def _dispatch_locked(
         return
 
     if ref.result_urls:
-        await _complete_with_urls(ctx, task, ref.result_urls)
+        try:
+            await _complete_with_urls(ctx, task, ref.result_urls)
+        except (ProviderTransientError, TaskError) as error:
+            logger.warning("task %s result persistence failed: %s", task.id, error)
+            repository.update_task_fields(
+                ctx.db,
+                task.id,
+                status="failed",
+                error=_safe_error(error),
+                completed_at=_now(),
+            )
+            repository.invalidate_task_tokens(ctx.db, task.id, _now())
         return
 
     repository.update_task_fields(
@@ -446,14 +457,13 @@ async def _download_result(ctx, url: str) -> tuple[bytes, str | None]:
     try:
         async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
             response = await client.get(url)
-        if response.status_code == 429 or response.status_code >= 500:
-            raise ProviderTransientError(f"下载结果暂时失败: {response.status_code}")
-        response.raise_for_status()
-        data = response.content
     except httpx.TransportError as error:
         raise ProviderTransientError(f"下载结果网络异常: {error}") from error
-    except httpx.HTTPStatusError as error:
-        raise TaskError(f"下载结果失败: {error.response.status_code}") from error
+    if response.status_code == 429 or response.status_code >= 500:
+        raise ProviderTransientError(f"下载结果暂时失败: {response.status_code}")
+    if not response.is_success:
+        raise TaskError(f"下载结果失败: {response.status_code}")
+    data = response.content
     if len(data) > MAX_RESULT_BYTES:
         raise TaskError("生成结果超过 500 MB 限制。")
     content_type = response.headers.get("content-type", "").split(";", 1)[0].strip()
@@ -622,9 +632,6 @@ async def retry_task(ctx, task_id: str) -> Task:
     needs_public_url = bool(
         definition and task.capability in definition.public_url_capabilities
     )
-    assets = [
-        link for link in repository.list_task_assets(ctx.db, task.id) if link.role != "output"
-    ]
     # 重试使用原始提示词，不自动增强：增强后的措辞可能触发上游内容审核。
     raw_prompt = task.original_prompt or str(task.parameters.get("prompt", ""))
     final_prompt = raw_prompt

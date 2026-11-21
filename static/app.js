@@ -58,6 +58,7 @@ function initCreateForm() {
   let modelId = "";
   const selectedFiles = {};
   const modelBindings = JSON.parse(root.dataset.modelBindings || "{}");
+  const providers = JSON.parse(root.dataset.providers || "{}");
   let enhancementEnabled = true;
   let selectedTemplateId = "";
   let enhancementApplied = false;
@@ -138,12 +139,19 @@ function initCreateForm() {
           .map((item) => {
             const selected = model && item.id === model.id ? " selected" : "";
             const version = item.version ? ` · ${esc(item.version)}` : "";
-            return `<option value="${item.id}"${selected}>${esc(item.name)}${version}</option>`;
+            const providerName = providers[item.providerId] || item.providerId;
+            return `<option value="${item.id}"${selected}>${esc(providerName)} · ${esc(item.name)}${version}</option>`;
           })
           .join("")
       : "<option value=\"\">暂无模型</option>";
     const parameterFields = model
-      ? model.parameterSchema.map((field) => fieldHTML(field, model)).join("")
+      ? model.parameterSchema
+          .filter(
+            (field) =>
+              !field.capabilities || field.capabilities.includes(capability)
+          )
+          .map((field) => fieldHTML(field, model))
+          .join("")
       : "";
     const fileFields = roles
       .map(

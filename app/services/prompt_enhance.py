@@ -17,8 +17,6 @@ from ..entities import ModelConfig, ModelPromptBinding, PromptTemplate
 from ..providers.base import TaskInput
 from . import tasks as tasks_service
 
-import logging
-
 logger = logging.getLogger(__name__)
 
 

@@ -25,6 +25,7 @@ class FieldSchema:
     options: tuple[str, ...] | None = None
     min: float | None = None
     max: float | None = None
+    capabilities: tuple[str, ...] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         data: dict[str, Any] = {"key": self.key, "label": self.label, "type": self.type}
@@ -38,6 +39,8 @@ class FieldSchema:
             data["min"] = self.min
         if self.max is not None:
             data["max"] = self.max
+        if self.capabilities is not None:
+            data["capabilities"] = list(self.capabilities)
         return data
 
 

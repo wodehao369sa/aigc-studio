@@ -46,6 +46,25 @@ def _model(model_id: str = "gpt-x") -> ModelConfig:
     )
 
 
+def test_reasoning_model_falls_back_to_reasoning_content(monkeypatch):
+    async def handle(payload):
+        return FakeResponse(
+            {"choices": [{"message": {"content": None, "reasoning_content": "推理得到的答案"}}]}
+        )
+
+    FakeAsyncClient.routes = {("POST", f"{BASE}/chat/completions"): handle}
+    monkeypatch.setattr(openai_adapter.httpx, "AsyncClient", FakeAsyncClient)
+
+    ref = asyncio.run(
+        OpenAICompatibleAdapter().submit(
+            TaskInput(prompt="hi", parameters={}, assets=[], capability="text_generation"),
+            _model(),
+            _runtime(),
+        )
+    )
+    assert ref.result_text == "推理得到的答案"
+
+
 def test_list_remote_models(monkeypatch):
     async def handle(params=None):
         return FakeResponse({"data": [{"id": "gpt-x"}, {"id": "gpt-y"}, {"id": "z"}]})

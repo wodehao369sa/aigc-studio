@@ -74,12 +74,17 @@ def home(request: Request):
                 items.append(global_binding)
         if items:
             model_bindings[model.id] = items
+    providers = {
+        provider.id: provider.name
+        for provider in repository.list_providers(ctx.db)
+    }
     usage = ctx.media.usage()
     return templates.TemplateResponse(
         request,
         "home.html",
         {
             "models": [model_dict(model) for model in models],
+            "providers": providers,
             "model_bindings": model_bindings,
             "usage": usage,
             "warn_bytes": MEDIA_WARN_BYTES,
@@ -150,6 +155,9 @@ def settings_page(request: Request):
     ctx = request.app.state.ctx
     template_list = [template_dict(item) for item in repository.list_prompt_templates(ctx.db)]
     template_names = {item["id"]: item["name"] for item in template_list}
+    provider_names = {
+        provider.id: provider.name for provider in repository.list_providers(ctx.db)
+    }
     models = tasks_service.list_models(ctx)
     image_models = [
         model
@@ -189,6 +197,7 @@ def settings_page(request: Request):
             "prompt_templates": template_list,
             "image_models": [model_dict(model) for model in image_models],
             "text_models": [model_dict(model) for model in text_models],
+            "provider_names": provider_names,
             "bindings": bindings,
             "enhance_default": {
                 "enabled": bool(global_config and global_config["enabled"]),

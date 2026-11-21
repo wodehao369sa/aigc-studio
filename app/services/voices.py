@@ -26,7 +26,7 @@ async def list_voices(
         runtime = build_runtime(ctx, provider)
     except RuntimeError as error:
         raise VoiceError(str(error))
-    adapter = ctx.registry.build_adapter(provider_type, runtime)
+    adapter = ctx.registry.build_adapter(provider.provider_type, runtime)
     if not hasattr(adapter, "list_voices"):
         raise VoiceError("该服务商不支持音色列表。")
     return await adapter.list_voices(

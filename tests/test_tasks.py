@@ -182,6 +182,39 @@ def test_delete_task_removes_media(client, monkeypatch, registered_model):
     assert client.get(f"/api/media/{asset['id']}").status_code == 404
 
 
+def test_sync_result_download_failure_marks_task_failed(client, monkeypatch):
+    client.post(
+        "/api/settings/models",
+        json={"providerId": "agnes", "preset": "agnes-image-2.5-flash", "name": "Agnes Image 2.5 Flash"},
+    )
+    model = next(
+        item
+        for item in client.get("/api/models").json()
+        if item["externalModelId"] == "agnes-image-2.5-flash"
+    )
+
+    async def handle_image(payload):
+        return FakeResponse({"data": [{"url": "https://cdn.example.com/missing.png"}]})
+
+    async def handle_get(params=None):
+        return FakeResponse({"detail": "not found"}, status_code=404)
+
+    FakeAsyncClient.routes = {
+        ("POST", f"{BASE_URL}/images/generations"): handle_image,
+        ("GET", "https://cdn.example.com/missing.png"): handle_get,
+    }
+    monkeypatch.setattr(agnes_adapter.httpx, "AsyncClient", FakeAsyncClient)
+
+    response = client.post(
+        "/api/tasks",
+        json={"modelId": model["id"], "capability": "text_to_image", "prompt": "a cat"},
+    )
+    assert response.status_code == 202, response.text
+    task = response.json()
+    assert task["status"] == "failed"
+    assert "下载结果失败" in (task["error"] or "")
+
+
 def test_retry_runs_same_task_in_place(client, monkeypatch, registered_model):
     FakeAsyncClient.routes = {}
     monkeypatch.setattr(agnes_adapter.httpx, "AsyncClient", FakeAsyncClient)
